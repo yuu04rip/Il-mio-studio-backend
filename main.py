@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from app.api.routes import auth, users, documents
 from app.db.session import Base, engine
 
-# Crea le tabelle in sviluppo (per produzione usa Alembic)
+# Crea le tabelle (sviluppo; per produzione usa Alembic!)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Studio Service API", version="0.1.0")

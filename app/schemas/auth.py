@@ -11,5 +11,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    full_name: str | None = None
-    role: str | None = None  # "client" (default) oppure "employee"/"admin" per ora libero
+    nome: str
+    cognome: str
+    numeroTelefonico: str | None = None
+    ruolo: str | None = None  # "cliente" (default) oppure "dipendente"/"notaio"

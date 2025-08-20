@@ -2,20 +2,13 @@ from pydantic import BaseModel, EmailStr
 
 class UserBase(BaseModel):
     email: EmailStr
-    full_name: str | None = None
-    role: str
+    nome: str
+    cognome: str
+    numeroTelefonico: str | None = None
+    ruolo: str
 
-class UserCreate(BaseModel):
-    email: EmailStr
+class UserCreate(UserBase):
     password: str
-    full_name: str | None = None
-
-class UserUpdate(BaseModel):
-    full_name: str | None = None
-
-class PasswordChange(BaseModel):
-    old_password: str
-    new_password: str
 
 class UserOut(UserBase):
     id: int

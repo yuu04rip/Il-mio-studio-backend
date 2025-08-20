@@ -11,25 +11,27 @@ router = APIRouter()
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    role = Role(payload.role) if payload.role in {r.value for r in Role} else Role.client
+        raise HTTPException(status_code=400, detail="Email già registrata")
+    ruolo_value = payload.ruolo
+    ruolo = Role(ruolo_value) if ruolo_value in {r.value for r in Role} else Role.CLIENTE
     user = User(
         email=payload.email,
-        full_name=payload.full_name,
-        hashed_password=hash_password(payload.password),
-        role=role,
+        nome=payload.nome,
+        cognome=payload.cognome,
+        numeroTelefonico=payload.numeroTelefonico,
+        password=hash_password(payload.password),
+        ruolo=ruolo,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-
-    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)
 
 @router.post("/login", response_model=Token)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    if not user or not verify_password(payload.password, user.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
+    token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)

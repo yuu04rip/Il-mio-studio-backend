@@ -1,25 +1,89 @@
-# Studio Service API (FastAPI)
+# Il Mio Studio Backend
 
-MVP per autenticazione, profilo utente e gestione documenti.
+Backend per la gestione dello studio legale/notarile, basato su FastAPI, SQLAlchemy e Pydantic v2.
 
-## Avvio rapido
+## 🏗️ Struttura del progetto
 
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env  # poi modifica SECRET_KEY se vuoi
-uvicorn app.main:app --reload
+```
+Il-mio-studio-backend/
+│
+├── main.py
+├── app/
+│   ├── api/
+│   │   ├── routes/
+│   │   │   ├── auth.py
+│   │   │   ├── users.py
+│   │   │   ├── documents.py
+│   │   │   └── ...
+│   │   └── deps.py
+│   ├── db/
+│   │   └── session.py
+│   ├── core/
+│   │   ├── config.py
+│   │   └── security.py
+│   └── models/
+│       ├── user.py
+│       ├── tables.py
+│       └── ...
+├── tests/
+│   └── test_app.py
+├── .env
+└── README.md
 ```
 
-Visita http://127.0.0.1:8000/docs per testare le API.
+## 🚀 Avvio rapido
 
-## Endpoints principali
-- POST /auth/register, POST /auth/login
-- GET /users/me, PUT /users/me, PUT /users/me/password
-- POST /documents (upload), GET /documents (list), GET /documents/{id}/download
+1. **Installa le dipendenze**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-## Note
-- DB: MySQL su porta 3310 (vedi `.env.example`), puoi cambiare `DATABASE_URL` per usare altri DB.
-- Storage: cartella `./storage`. In produzione usa uno storage esterno (S3, Azure Blob).
-- Per migrazioni DB in produzione, aggiungi Alembic.
+2. **Crea il file `.env`**
+    ```
+    SECRET_KEY=la-tua-secret-key-lunga-e-casuale
+    DATABASE_URL=sqlite:///./app.db
+    ```
+
+3. **Avvia il server**
+    ```bash
+    uvicorn main:app --reload
+    ```
+
+4. **Documentazione API**
+    - Interattiva: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## 🔑 Note Pydantic v2
+
+> Se usi Pydantic v2, nei tuoi schemas metti:
+> ```python
+> class Config:
+>     from_attributes = True
+> ```
+
+## 🧪 Test automatici
+
+Metti i test in `tests/test_app.py`.  
+Avvia i test con:
+```bash
+pytest
+```
+
+## 📂 Database
+
+Le tabelle vengono create all’avvio tramite:
+```python
+Base.metadata.create_all(bind=engine)
+```
+**Per produzione usa Alembic per le migrazioni!**
+
+## 🛠️ Endpoints principali
+
+- `/auth/register` - Registrazione utente
+- `/auth/login` - Login e token JWT
+- `/users/me` - Info utente autenticato
+- `/documents` - Upload e gestione documenti
+- `/` - Status app
+
+## 🤝 Contributi
+
+Apri una issue o una pull request!
