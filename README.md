@@ -12,23 +12,57 @@ Il-mio-studio-backend/
 │   ├── api/
 │   │   ├── routes/
 │   │   │   ├── auth.py
-│   │   │   ├── users.py
+│   │   │   ├── dipendente.py
 │   │   │   ├── documents.py
-│   │   │   └── ...
+│   │   │   ├── services.py
+│   │   │   ├── services_init.py
+│   │   │   ├── users.py
 │   │   └── deps.py
-│   ├── db/
-│   │   └── session.py
 │   ├── core/
 │   │   ├── config.py
 │   │   └── security.py
-│   └── models/
-│       ├── user.py
-│       ├── tables.py
-│       └── ...
+│   ├── db/
+│   │   └── session.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── cliente.py
+│   │   ├── dipendente.py
+│   │   ├── documentazione.py
+│   │   ├── enums.py
+│   │   ├── notaio.py
+│   │   ├── services.py
+│   │   ├── tables.py
+│   │   └── user.py
+│   ├── schemas/
+│   │   ├── auth.py
+│   │   ├── cliente.py
+│   │   ├── dipendente.py
+│   │   ├── document.py
+│   │   ├── enums.py
+│   │   ├── notaio.py
+│   │   ├── services.py
+│   │   └── user.py
+├── storage/
 ├── tests/
-│   └── test_app.py
+│   ├── conftest.py
+│   ├── test_app.py
+│   ├── test_dipendente_notaio.py
+│   ├── test_docs.py
+│   ├── test_documentazione.py
+│   ├── test_servizi.py
+│   └── test_users.py
+├── alembic/
+│   ├── versions/
+│   │   └── 45d1d2fc98b0_aggiunta_codice_notarile_a_notai.py
+│   ├── env.py
+│   ├── README
+│   └── script.py.mako
 ├── .env
-└── README.md
+├── alembic.ini
+├── Il-mio-studio-backend.iml
+├── README.md
+├── requirements.txt
+├── test.db
 ```
 
 ## 🚀 Avvio rapido
@@ -38,18 +72,25 @@ Il-mio-studio-backend/
     pip install -r requirements.txt
     ```
 
-2. **Crea il file `.env`**
+2. **Configura variabili d'ambiente**
+   Crea il file `.env`:
     ```
     SECRET_KEY=la-tua-secret-key-lunga-e-casuale
-    DATABASE_URL=sqlite:///./app.db
+    DATABASE_URL=mysql+mysqlconnector://user:password@localhost:3306/utenti
+    ```
+   > Puoi usare anche SQLite per sviluppo, ma per produzione raccomandato MySQL/PostgreSQL.
+
+3. **Applica le migrazioni (consigliato in produzione)**
+    ```bash
+    alembic upgrade head
     ```
 
-3. **Avvia il server**
+4. **Avvia il server**
     ```bash
     uvicorn main:app --reload
     ```
 
-4. **Documentazione API**
+5. **Documentazione API**
     - Interattiva: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## 🔑 Note Pydantic v2
@@ -62,7 +103,7 @@ Il-mio-studio-backend/
 
 ## 🧪 Test automatici
 
-Metti i test in `tests/test_app.py`.  
+Metti i test in `tests/test_app.py` (e altri test come preferisci).
 Avvia i test con:
 ```bash
 pytest
@@ -75,6 +116,14 @@ Le tabelle vengono create all’avvio tramite:
 Base.metadata.create_all(bind=engine)
 ```
 **Per produzione usa Alembic per le migrazioni!**
+- Genera una nuova migration:
+  ```bash
+  alembic revision --autogenerate -m "Messaggio"
+  ```
+- Applica le migration:
+  ```bash
+  alembic upgrade head
+  ```
 
 ## 🛠️ Endpoints principali
 
@@ -83,6 +132,24 @@ Base.metadata.create_all(bind=engine)
 - `/users/me` - Info utente autenticato
 - `/documents` - Upload e gestione documenti
 - `/` - Status app
+
+## 📦 Reset database (dev)
+
+Se vuoi azzerare tutti i dati e gli auto_increment:
+```sql
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE servizio_documentazione;
+TRUNCATE TABLE dipendente_servizio;
+TRUNCATE TABLE dipendente_cliente;
+TRUNCATE TABLE documentazioni;
+TRUNCATE TABLE servizi;
+TRUNCATE TABLE clienti;
+TRUNCATE TABLE dipendenti_tecnici;
+TRUNCATE TABLE notai;
+TRUNCATE TABLE users;
+SET FOREIGN_KEY_CHECKS = 1;
+```
+> **Attenzione:** Incolla tutto il blocco su phpMyAdmin o nel client MySQL, **non riga per riga**.
 
 ## 🤝 Contributi
 

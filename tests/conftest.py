@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import uuid
 from datetime import datetime
-
+from fastapi import FastAPI
 from main import app
 from app.api.deps import get_db
 from app.db.session import Base
@@ -15,7 +15,7 @@ from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.documentazione import Documentazione
 from app.models.services import Servizio
-from app.models.enums import Role
+from app.models.enums import Role, TipoDocumentazione, TipoServizio
 
 TEST_DATABASE_URL = "sqlite:///./test.db"  # usa file, NON memory!
 engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -50,7 +50,7 @@ def test_user_data():
         "nome": "Test",
         "cognome": "User",
         "numeroTelefonico": "123456789",
-        "ruolo": "cliente"
+        "ruolo": Role.CLIENTE
     }
 
 @pytest.fixture
@@ -61,13 +61,19 @@ def test_notaio_data():
         "nome": "Notaio",
         "cognome": "Test",
         "numeroTelefonico": "987654321",
-        "ruolo": "notaio"
+        "ruolo": Role.NOTAIO
     }
 
 @pytest.fixture
 def test_cliente(db_session):
     random_email = f"cliente_{uuid.uuid4().hex}@example.com"
-    user = User(email=random_email, password="hashed", nome="Cliente", cognome="Fixture", ruolo=Role.CLIENTE)
+    user = User(
+        email=random_email,
+        password="hashed",
+        nome="Cliente",
+        cognome="Fixture",
+        ruolo=Role.CLIENTE
+    )
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -75,12 +81,18 @@ def test_cliente(db_session):
     db_session.add(cliente)
     db_session.commit()
     db_session.refresh(cliente)
+    cliente.utente = user  # Associa user all'oggetto cliente (in memoria)
     return cliente
 
 @pytest.fixture
 def test_documentazione(db_session, test_cliente):
     # Usa un valore valido dell'enum come tipo!
-    doc = Documentazione(cliente_id=test_cliente.id, filename="test.txt", tipo="CARTA_IDENTITA", path="/tmp/test.txt")
+    doc = Documentazione(
+        cliente_id=test_cliente.id,
+        filename="test.txt",
+        tipo=TipoDocumentazione.CARTA_IDENTITA,  # esempio con enum
+        path="/tmp/test.txt"
+    )
     db_session.add(doc)
     db_session.commit()
     db_session.refresh(doc)
@@ -91,7 +103,7 @@ def test_servizio(db_session, test_cliente):
     now = datetime.now()
     servizio = Servizio(
         cliente_id=test_cliente.id,
-        tipo="ATTO",  # oppure "COMPROMESSO", "PREVENTIVO"
+        tipo=TipoServizio.ATTO,  # esempio con enum
         codiceCorrente=123,
         codiceServizio=456,
         statoServizio=False,

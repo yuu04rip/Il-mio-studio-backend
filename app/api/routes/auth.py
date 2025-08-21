@@ -4,6 +4,7 @@ from app.api.deps import get_db
 from app.core.security import hash_password, verify_password, create_access_token
 from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.models.user import User, Role
+from app.models.cliente import Cliente  # <-- IMPORTA Cliente!
 
 router = APIRouter()
 
@@ -25,6 +26,14 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # CREA ANCHE IL CLIENTE se il ruolo è CLIENTE!
+    if ruolo == Role.CLIENTE:
+        cliente = Cliente(utente_id=user.id)
+        db.add(cliente)
+        db.commit()
+        db.refresh(cliente)
+
     token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)
 

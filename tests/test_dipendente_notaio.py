@@ -8,17 +8,14 @@ from fastapi.testclient import TestClient
 client = TestClient(app)
 
 def test_add_dipendente(test_user_data):
-    response = client.post("/add-dipendente", json={
-        "user_data": test_user_data,
-        "tipo": "TECNICO"  # Usa il valore ESATTO dell'enum!
-    })
+    # Passa tipo come query param, dati utente direttamente come body
+    # Usa un valore valido dell'enum: 'contabile', 'notaio', 'assistente'
+    response = client.post("/add-dipendente?tipo=notaio", json=test_user_data)
     print(response.status_code, response.json()) # Debug
     assert response.status_code == 200
 
 def test_add_notaio(test_notaio_data):
-    response = client.post("/add-notaio", json={
-        "user_data": test_notaio_data,
-        "codiceNotarile": 1001
-    })
+    # Passa codiceNotarile come query param, dati utente direttamente come body
+    response = client.post("/add-notaio?codice_notarile=1001", json=test_notaio_data)
     print(response.status_code, response.json()) # Debug
     assert response.status_code == 200

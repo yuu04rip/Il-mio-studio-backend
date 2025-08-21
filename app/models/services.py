@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, DateTime, Boolean, ForeignKey, Enum, func
+from sqlalchemy import Integer, DateTime, Boolean, ForeignKey, Enum
 from app.db.session import Base
+from datetime import datetime
 from app.models.enums import TipoServizio
 
 class Servizio(Base):
@@ -12,8 +13,8 @@ class Servizio(Base):
 
     codiceCorrente: Mapped[int] = mapped_column(Integer)
     codiceServizio: Mapped[int] = mapped_column(Integer)
-    dataConsegna: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
-    dataRichiesta: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
+    dataConsegna: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    dataRichiesta: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     statoServizio: Mapped[bool] = mapped_column(Boolean, default=False)
     tipo: Mapped[TipoServizio] = mapped_column(Enum(TipoServizio), nullable=False)
 

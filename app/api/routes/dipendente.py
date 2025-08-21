@@ -8,7 +8,8 @@ from app.schemas.notaio import NotaioOut
 from app.models.user import User
 from app.models.enums import TipoDipendenteTecnico, Role
 from app.schemas.user import UserCreate
-
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 router = APIRouter()
 
 @router.post("/add-dipendente", response_model=DipendenteTecnicoOut)
@@ -20,7 +21,9 @@ def add_dipendente(
     exist = db.query(User).filter(User.email == user_data.email).first()
     if exist:
         raise HTTPException(status_code=400, detail="Dipendente già esistente")
-    user = User(**user_data.dict(), role=Role.DIPENDENTE)
+    data = user_data.dict()
+    data.pop('ruolo', None)
+    user = User(**data, ruolo=Role.DIPENDENTE)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -31,15 +34,21 @@ def add_dipendente(
     return dipendente
 
 @router.post("/add-notaio", response_model=NotaioOut)
-def add_notaio(user_data: UserCreate, codiceNotarile: int, db: Session = Depends(get_db)):
+def add_notaio(
+        user_data: UserCreate,
+        codice_notarile: int = Query(...),
+        db: Session = Depends(get_db)
+):
     exist = db.query(User).filter(User.email == user_data.email).first()
     if exist:
         raise HTTPException(status_code=400, detail="Notaio già esistente")
-    user = User(**user_data.dict(), role=Role.NOTAIO)
+    data = user_data.dict()
+    data.pop('ruolo', None)
+    user = User(**data, ruolo=Role.NOTAIO)
     db.add(user)
     db.commit()
     db.refresh(user)
-    notaio = Notaio(utente_id=user.id, codiceNotarile=codiceNotarile)
+    notaio = Notaio(utente_id=user.id, codice_notarile=codice_notarile)
     db.add(notaio)
     db.commit()
     db.refresh(notaio)

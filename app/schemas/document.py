@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
+from datetime import datetime
 from app.models.enums import TipoDocumentazione
 
 class DocumentazioneOut(BaseModel):
@@ -6,7 +7,11 @@ class DocumentazioneOut(BaseModel):
     filename: str
     tipo: TipoDocumentazione
     path: str
-    created_at: str
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_datetime(self, value: datetime, _info):
+        return value.isoformat() if value else None
 
     class Config:
         from_attributes = True
