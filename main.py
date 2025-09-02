@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from app.api.routes import auth, users, documents
+from app.api.routes import auth, users
 from app.api.routes.dipendente import router as dipendente_notaio_router
 from app.api.routes.documents import router as documentazione_router
 from app.api.routes.services import router as servizi_router
@@ -16,7 +16,6 @@ app = FastAPI(title="Studio Service API", version="0.1.0")
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
-app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(dipendente_notaio_router, tags=["dipendente-notaio"])
 app.include_router(documentazione_router, prefix="/documentazione", tags=["documentazione"])
 app.include_router(servizi_router, tags=["servizi"])
