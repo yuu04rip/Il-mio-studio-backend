@@ -8,3 +8,4 @@ passlib[bcrypt]>=1.7
 python-multipart>=0.0.7
 mysql-connector-python>=8.0
 alembic>=1.13
+pydantic[email]
