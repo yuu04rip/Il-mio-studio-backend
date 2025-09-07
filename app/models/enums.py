@@ -19,6 +19,7 @@ class TipoDipendenteTecnico(str, enum.Enum):
     NOTAIO = "notaio"
     CONTABILE = "contabile"
     ASSISTENTE = "assistente"
+    DIPENDENTE = "dipendente"
 
 class Role(str, enum.Enum):
     CLIENTE = "cliente"

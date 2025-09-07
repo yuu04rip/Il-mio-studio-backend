@@ -62,3 +62,22 @@ def inizializza_servizio(
 
     print("="*40)
     return servizio
+@router.get("/servizi/codice/{codice_servizio}", response_model=ServizioOut)
+def cerca_servizio_per_codice(codice_servizio: int, db: Session = Depends(get_db)):
+    servizio = db.query(Servizio).filter(Servizio.codiceServizio == codice_servizio).first()
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    return servizio
+
+@router.delete("/servizi/{servizio_id}")
+def elimina_servizio(servizio_id: int, db: Session = Depends(get_db)):
+    servizio = db.get(Servizio, servizio_id)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    db.delete(servizio)
+    db.commit()
+    return {"ok": True}
+
+@router.get("/servizi/", response_model=list[ServizioOut])
+def visualizza_servizi(db: Session = Depends(get_db)):
+    return db.query(Servizio).all()

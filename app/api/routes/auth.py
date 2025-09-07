@@ -5,6 +5,9 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.models.user import User, Role
 from app.models.cliente import Cliente  # <-- IMPORTA Cliente!
+from app.models.dipendente import DipendenteTecnico
+from app.models.notaio import Notaio
+from app.schemas.user import ChangePasswordRequest
 
 router = APIRouter()
 
@@ -42,5 +45,29 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
+    if user.ruolo == Role.NOTAIO:
+        # Cerca direttamente il notaio collegato a quell'utente
+        notaio = db.query(Notaio).filter(Notaio.utente_id == user.id).first()
+        if not notaio or payload.codice_notarile != notaio.codice_notarile:
+            raise HTTPException(status_code=401, detail="Codice notarile errato")
     token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)
+
+@router.post("/change-password")
+def change_password(
+        payload: ChangePasswordRequest,
+        db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user or not verify_password(payload.old_password, user.password):
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
+
+    # Se è notaio, controlla il codice notarile
+    if user.ruolo == Role.NOTAIO:
+        notaio = db.query(Notaio).filter(Notaio.utente_id == user.id).first()
+        if not notaio or payload.codice_notarile != notaio.codice_notarile:
+            raise HTTPException(status_code=401, detail="Codice notarile errato")
+
+    user.password = hash_password(payload.new_password)
+    db.commit()
+    return {"msg": "Password aggiornata con successo"}

@@ -7,6 +7,7 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    codice_notarile: int | None = None
 
 class RegisterRequest(BaseModel):
     email: EmailStr
