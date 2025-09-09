@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
-
+from app.schemas.user import UserOut
+from app.schemas.auth import ChangeEmailRequest
+from app.api.deps import get_current_user
 from app.api.deps import get_db
-from app.core.security import hash_password, create_access_token
+from app.core.security import hash_password, create_access_token, verify_password
 from app.schemas.auth import LoginRequest, RegisterRequest, Token
 from app.models.user import User, Role
 from app.models.cliente import Cliente
@@ -63,3 +65,19 @@ def change_password(payload: ChangePasswordRequest, db: Session = Depends(get_db
 async def logout():
     # Qui non c'è nulla da fare lato backend, il logout è gestito solo lato client.
     return JSONResponse(content={"message": "Logout effettuato"})
+@router.post("/change-email", response_model=UserOut)
+def change_email(
+        payload: ChangeEmailRequest,
+        db: Session = Depends(get_db),
+        current: User = Depends(get_current_user)
+):
+    # Verifica password
+    if not verify_password(payload.password, current.hashed_password):
+        raise HTTPException(status_code=400, detail="Password errata")
+    # Email deve essere unica
+    if db.query(User).filter(User.email == payload.new_email).first():
+        raise HTTPException(status_code=400, detail="Email già registrata")
+    current.email = payload.new_email
+    db.commit()
+    db.refresh(current)
+    return current

@@ -16,3 +16,7 @@ class RegisterRequest(BaseModel):
     cognome: str
     numeroTelefonico: str | None = None
     ruolo: str | None = None  # "cliente" (default) oppure "dipendente"/"notaio"
+class ChangeEmailRequest(BaseModel):
+    email: str
+    new_email: str
+    password: str
