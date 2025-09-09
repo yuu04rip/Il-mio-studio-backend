@@ -18,5 +18,7 @@ class Servizio(Base):
     statoServizio: Mapped[bool] = mapped_column(Boolean, default=False)
     tipo: Mapped[TipoServizio] = mapped_column(Enum(TipoServizio), nullable=False)
 
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)  # <--- AGGIUNTO
+
     dipendenti = relationship("DipendenteTecnico", secondary="dipendente_servizio", back_populates="servizi")
     lavoroCaricato = relationship("Documentazione", secondary="servizio_documentazione", back_populates="servizi")

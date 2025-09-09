@@ -11,6 +11,7 @@ class ServizioOut(BaseModel):
     dataRichiesta: datetime
     statoServizio: bool
     tipo: TipoServizio
+    is_deleted: bool
 
     @field_serializer('dataConsegna', 'dataRichiesta')
     def serialize_datetime(self, value: datetime, _info):
