@@ -43,8 +43,14 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     gestore = GestoreLogin(db)
     user = gestore.login(payload.email, payload.password, getattr(payload, "codice_notarile", None))
+    print("Payload login:", payload)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
+    if hasattr(payload, "ruolo") and payload.ruolo:
+        ruolo_richiesto = payload.ruolo.upper()
+        ruolo_reale = user.ruolo.value.upper()
+        if ruolo_richiesto != ruolo_reale:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ruolo non autorizzato")
     token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)
 
@@ -72,7 +78,7 @@ def change_email(
         current: User = Depends(get_current_user)
 ):
     # Verifica password
-    if not verify_password(payload.password, current.hashed_password):
+    if not verify_password(payload.password, current.password):
         raise HTTPException(status_code=400, detail="Password errata")
     # Email deve essere unica
     if db.query(User).filter(User.email == payload.new_email).first():

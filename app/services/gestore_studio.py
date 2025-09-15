@@ -217,3 +217,9 @@ class GestoreStudio:
         self.db.commit()
         self.db.refresh(doc)
         return doc
+    def visualizza_servizi_cliente(self, cliente_id: int):
+        # Ritorna tutti i servizi per uno specifico cliente (escludendo i soft-deleted)
+        return [
+            s for s in self.db.query(Servizio).filter(Servizio.cliente_id == cliente_id).all()
+            if s.id not in self._servizi_virtualmente_eliminati
+        ]

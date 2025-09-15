@@ -15,8 +15,8 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    # Solo aggiunta colonna!
-    op.add_column('notai', sa.Column('codice_notarile', sa.Integer(), nullable=False))
+    # La colonna esiste già, non fare nulla qui
+    pass
 
 def downgrade():
     # Solo rimozione colonna!

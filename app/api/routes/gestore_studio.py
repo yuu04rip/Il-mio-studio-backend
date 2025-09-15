@@ -133,7 +133,12 @@ def cerca_servizio_per_codice(codice_servizio: int, db: Session = Depends(get_db
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     return servizio
-
+@router.get("/servizi", response_model=List[ServizioOut])
+def visualizza_servizi(cliente_id: int = Query(None), db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    if cliente_id is not None:
+        return gestore.visualizza_servizi_cliente(cliente_id)
+    return gestore.visualizza_servizi()
 # --- SERVIZI ARCHIVIATI (delega a GestoreBackup tramite GestoreStudio) ---
 
 @router.post("/servizi/{servizio_id}/archivia", response_model=ServizioOut)
