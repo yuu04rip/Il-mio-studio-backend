@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
+
+from app.models import Notaio
 from app.schemas.user import UserOut
-from app.schemas.auth import ChangeEmailRequest
+from app.schemas.auth import ChangeEmailRequest, RegisterNotaioRequest
 from app.api.deps import get_current_user
 from app.api.deps import get_db
 from app.core.security import hash_password, create_access_token, verify_password
@@ -19,7 +21,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email già registrata")
-    ruolo_value = payload.ruolo
+    # CASE-INSENSITIVE
+    ruolo_value = payload.ruolo.upper() if payload.ruolo else "CLIENTE"
     ruolo = Role(ruolo_value) if ruolo_value in {r.value for r in Role} else Role.CLIENTE
     user = User(
         email=payload.email,
@@ -36,9 +39,15 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         db.add(cliente)
         db.commit()
         db.refresh(cliente)
+    elif ruolo == Role.NOTAIO:
+        if not payload.codice_notarile:
+            raise HTTPException(status_code=400, detail="Codice notarile obbligatorio per il notaio")
+        notaio = Notaio(utente_id=user.id, codice_notarile=payload.codice_notarile)
+        db.add(notaio)
+        db.commit()
+        db.refresh(notaio)
     token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)
-
 @router.post("/login", response_model=Token)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     gestore = GestoreLogin(db)
@@ -87,3 +96,27 @@ def change_email(
     db.commit()
     db.refresh(current)
     return current
+@router.post("/register-notaio", response_model=Token)
+def register_notaio(payload: RegisterNotaioRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email già registrata")
+    # Verifica unicità codice notarile
+    if db.query(Notaio).filter(Notaio.codice_notarile == payload.codice_notarile).first():
+        raise HTTPException(status_code=400, detail="Codice notarile già registrato")
+    user = User(
+        email=payload.email,
+        nome=payload.nome,
+        cognome=payload.cognome,
+        numeroTelefonico=payload.numeroTelefonico,
+        password=hash_password(payload.password),
+        ruolo=Role.NOTAIO,
+    )
+    gestore = GestoreLogin(db)
+    gestore.aggiungi_utente(user)
+    notaio = Notaio(utente_id=user.id, codice_notarile=payload.codice_notarile)
+    db.add(notaio)
+    db.commit()
+    db.refresh(notaio)
+    token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
+    return Token(access_token=token)

@@ -8,7 +8,6 @@ class GestoreLogin:
         self.db = db
         self.utente_corrente = None  # opzionale, utile se vuoi salvare chi ha fatto login
 
-    # Lista utenti
     def lista_utenti(self):
         return self.db.query(User).all()
 
@@ -21,22 +20,38 @@ class GestoreLogin:
     def login(self, email: str, password: str, codice_notarile: int = None):
         user = self.db.query(User).filter(User.email == email).first()
         if not user or not verify_password(password, user.password):
+            print(f"DEBUG login: utente non trovato o password errata per email={email}")
             return None
-        if user.ruolo.value == "notaio":
+        if user.ruolo.value.lower() == "notaio":
             notaio = self.db.query(Notaio).filter(Notaio.utente_id == user.id).first()
-            if not notaio or codice_notarile != notaio.codice_notarile:
+            print(f"DEBUG login: codice_notarile payload={codice_notarile} db={getattr(notaio,'codice_notarile',None)}")
+            try:
+                if not notaio or int(codice_notarile) != int(notaio.codice_notarile):
+                    print("DEBUG login: codice notarile non corrisponde o notaio non trovato")
+                    return None
+            except Exception as e:
+                print(f"DEBUG login: errore nel confronto codice_notarile: {e}")
                 return None
         self.utente_corrente = user
+        print(f"DEBUG login: login riuscito per email={email}, ruolo={user.ruolo.value}")
         return user
 
     def change_password(self, email: str, old_password: str, new_password: str, codice_notarile: int = None):
         user = self.db.query(User).filter(User.email == email).first()
         if not user or not verify_password(old_password, user.password):
+            print(f"DEBUG change_password: utente non trovato o password errata per email={email}")
             return False
-        if user.ruolo.value == "notaio":
+        if user.ruolo.value.lower() == "notaio":
             notaio = self.db.query(Notaio).filter(Notaio.utente_id == user.id).first()
-            if not notaio or codice_notarile != notaio.codice_notarile:
+            print(f"DEBUG change_password: codice_notarile payload={codice_notarile} db={getattr(notaio,'codice_notarile',None)}")
+            try:
+                if not notaio or int(codice_notarile) != int(notaio.codice_notarile):
+                    print("DEBUG change_password: codice notarile non corrisponde o notaio non trovato")
+                    return False
+            except Exception as e:
+                print(f"DEBUG change_password: errore nel confronto codice_notarile: {e}")
                 return False
         user.password = hash_password(new_password)
         self.db.commit()
+        print(f"DEBUG change_password: password cambiata per email={email}")
         return True
