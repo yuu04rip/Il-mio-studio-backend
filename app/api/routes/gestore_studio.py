@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List
 from app.api.deps import get_db
+from app.core.email import send_email
 from app.services.gestore_studio import GestoreStudio
 from app.core.security import hash_password
 from app.models.user import User, Role
@@ -67,6 +68,11 @@ def get_notai(db: Session = Depends(get_db)):
 def get_clienti(db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
     return gestore.get_clienti()
+@router.get("/clienti/search/", response_model=List[ClienteOut])
+def search_clienti(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    clienti = gestore.search_clienti(q)
+    return clienti
 
 @router.get("/clienti/nome/{nome}", response_model=ClienteOut)
 def cerca_cliente_per_nome(nome: str, db: Session = Depends(get_db)):
@@ -75,7 +81,39 @@ def cerca_cliente_per_nome(nome: str, db: Session = Depends(get_db)):
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
     return cliente
+@router.post("/servizi/richiesta-chat")
+async def richiesta_servizio_chat(
+        request: Request,
+        cliente_id: int = Form(None),  # <-- Form(None) per accettare anche json!
+        testo: str = Form(None),
+        db: Session = Depends(get_db)
+):
+    # Se non arrivano come form, prova a leggere dal JSON
+    if cliente_id is None or testo is None:
+        try:
+            body = await request.json()
+            cliente_id = body.get("cliente_id")
+            testo = body.get("testo")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Missing parameters cliente_id and testo")
 
+    if cliente_id is None or testo is None:
+        raise HTTPException(status_code=400, detail="Missing parameters cliente_id and testo")
+
+    # Recupera il cliente e la sua email
+    cliente = db.get(Cliente, cliente_id)
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    user = db.get(User, cliente.utente_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    studio_email = "obpapiprova@gmail.com"
+    subject = f"Richiesta servizio da {user.nome} {user.cognome}"
+    body_text = f"Messaggio dal cliente:\n\n{testo}\n\nEmail cliente: {user.email}"
+    send_email(to=studio_email, subject=subject, body=body_text, reply_to=user.email)
+
+    return {"ok": True, "msg": "Richiesta inviata via email al notaio/studio"}
 # --- SERVIZI ---
 
 @router.delete("/servizi/{servizio_id}")

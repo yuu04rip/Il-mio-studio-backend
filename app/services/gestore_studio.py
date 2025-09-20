@@ -92,6 +92,11 @@ class GestoreStudio:
 
     def cerca_cliente_per_nome(self, nome: str):
         return self.db.query(Cliente).join(Cliente.utente).filter(User.nome == nome).first()
+    def search_clienti(self, q: str):
+    # Cerca sia su nome che su cognome (case insensitive)
+     return self.db.query(Cliente).join(Cliente.utente).filter(
+        (User.nome.ilike(f"%{q}%")) | (User.cognome.ilike(f"%{q}%"))
+    ).all()
 
     # --- Servizi ---
     def aggiungi_servizio(self, cliente_id, tipo: TipoServizio, codiceCorrente, codiceServizio, dataRichiesta, dataConsegna):
