@@ -120,3 +120,40 @@ def register_notaio(payload: RegisterNotaioRequest, db: Session = Depends(get_db
     db.refresh(notaio)
     token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
     return Token(access_token=token)
+@router.post("/register-dipendente", response_model=Token)
+def register_dipendente(payload: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email già registrata")
+    ruolo = Role.DIPENDENTE
+    user = User(
+        email=payload.email,
+        nome=payload.nome,
+        cognome=payload.cognome,
+        numeroTelefonico=payload.numeroTelefonico,
+        password=hash_password(payload.password),
+        ruolo=ruolo,
+    )
+    gestore = GestoreLogin(db)
+    gestore.aggiungi_utente(user)
+
+    # Qui puoi fare:
+    from app.models.dipendente import DipendenteTecnico
+    from app.models.enums import TipoDipendenteTecnico
+
+    tipo = getattr(payload, "tipo", None)
+    if not tipo:
+        tipo = TipoDipendenteTecnico.DIPENDENTE
+    elif isinstance(tipo, str):
+        tipo = TipoDipendenteTecnico(tipo)
+
+    dipendente_tecnico = DipendenteTecnico(
+        utente_id=user.id,
+        tipo=tipo,
+    )
+    db.add(dipendente_tecnico)
+    db.commit()
+    db.refresh(dipendente_tecnico)
+
+    token = create_access_token({"sub": str(user.id), "role": user.ruolo.value})
+    return Token(access_token=token)

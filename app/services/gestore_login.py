@@ -33,6 +33,8 @@ class GestoreLogin:
                 print(f"DEBUG login: errore nel confronto codice_notarile: {e}")
                 return None
         self.utente_corrente = user
+        print("DEBUG: ruolo utente trovato:", user.ruolo)
+        print("DEBUG: value:", getattr(user.ruolo, "value", user.ruolo))
         print(f"DEBUG login: login riuscito per email={email}, ruolo={user.ruolo.value}")
         return user
 

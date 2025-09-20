@@ -65,12 +65,19 @@ class GestoreStudio:
         return True
 
     def distruggi_dipendente(self, dipendente_id: int):
-        """Hard delete: elimina davvero dal database."""
         dip = self.db.get(DipendenteTecnico, dipendente_id)
         if not dip:
-            return False
-        self.db.delete(dip)
-        self.db.commit()
+         return False
+        # Elimina il Cliente se esiste
+        cliente = self.db.query(Cliente).filter(Cliente.utente_id == dip.utente_id).first()
+        if cliente:
+            self.db.delete(cliente)
+    # Elimina l'utente associato
+        user = self.db.get(User, dip.utente_id)
+        if user:
+         self.db.delete(user)
+         self.db.delete(dip)
+         self.db.commit()
         return True
 
     def get_dipendenti(self):

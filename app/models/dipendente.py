@@ -8,7 +8,12 @@ class DipendenteTecnico(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     utente_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
-    tipo: Mapped[TipoDipendenteTecnico] = mapped_column(Enum(TipoDipendenteTecnico), nullable=False)
+    tipo: Mapped[TipoDipendenteTecnico] = mapped_column(
+    Enum(TipoDipendenteTecnico),
+    nullable=False,
+    default=TipoDipendenteTecnico.DIPENDENTE,
+    server_default=TipoDipendenteTecnico.DIPENDENTE.value
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "dipendente_tecnico",
@@ -20,13 +25,14 @@ class DipendenteTecnico(Base):
     servizi = relationship("Servizio", secondary="dipendente_servizio", back_populates="dipendenti")
     utente = relationship("User", back_populates="dipendente", overlaps="notaio")
 
-# Sottoclasse per il tipo "contabile"
 class Contabile(DipendenteTecnico):
     __mapper_args__ = {
         "polymorphic_identity": "contabile",
     }
-
-# Sottoclasse per il tipo "assistente"
+class Dipendente(DipendenteTecnico):
+    __mapper_args__ = {
+        "polymorphic_identity": "dipendente",
+    }
 class Assistente(DipendenteTecnico):
     __mapper_args__ = {
         "polymorphic_identity": "assistente",
