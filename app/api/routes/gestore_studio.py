@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, UploadFile, File, Form, Body
 from sqlalchemy.orm import Session
 from typing import List
 from app.api.deps import get_db
@@ -56,6 +56,12 @@ def distruggi_dipendente(dipendente_id: int, db: Session = Depends(get_db)):
 def get_dipendenti(db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
     return gestore.get_dipendenti()
+@router.get("/dipendente/by_user/{utente_id}", response_model=int)
+def get_dipendente_id_by_user(utente_id: int, db: Session = Depends(get_db)):
+    dip = db.query(DipendenteTecnico).filter(DipendenteTecnico.utente_id == utente_id).first()
+    if not dip:
+        raise HTTPException(status_code=404, detail="Dipendente tecnico non trovato")
+    return dip.id
 
 @router.get("/notai/", response_model=List[NotaioOut])
 def get_notai(db: Session = Depends(get_db)):
@@ -137,80 +143,57 @@ def distruggi_servizio(servizio_id: int, db: Session = Depends(get_db)):
     if not ok:
         raise HTTPException(status_code=404, detail="Servizio non trovato nel database")
     return {"ok": True}
-
-@router.post("/servizi", response_model=ServizioOut)
-def crea_servizio(
-        cliente_id: int = Form(...),
-        tipo: TipoServizio = Form(...),
-        codiceCorrente: int = Form(...),
-        codiceServizio: int = Form(...),
-        db: Session = Depends(get_db)
-):
-    from datetime import datetime
+# Inizializza servizio (dipendente tecnico)
+@router.post("/servizi/{servizio_id}/inizializza")
+def inizializza_servizio(servizio_id: int, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
-    now = datetime.now()
-    servizio = gestore.aggiungi_servizio(
-        cliente_id=cliente_id,
-        tipo=tipo,
-        codiceCorrente=codiceCorrente,
-        codiceServizio=codiceServizio,
-        dataRichiesta=now,
-        dataConsegna=now,
-    )
-    return servizio
-
-@router.get("/servizi/", response_model=List[ServizioOut])
-def visualizza_servizi(db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    return gestore.visualizza_servizi()
-
-@router.get("/servizi/codice/{codice_servizio}", response_model=ServizioOut)
-def cerca_servizio_per_codice(codice_servizio: int, db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    servizio = gestore.cerca_servizio_per_codice(codice_servizio)
+    servizio = gestore.inizializza_servizio(servizio_id)
     if not servizio:
-        raise HTTPException(status_code=404, detail="Servizio non trovato")
+        raise HTTPException(status_code=404, detail="Servizio non trovato o già inizializzato")
     return servizio
-@router.get("/servizi", response_model=List[ServizioOut])
-def visualizza_servizi(cliente_id: int = Query(None), db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    if cliente_id is not None:
-        return gestore.visualizza_servizi_cliente(cliente_id)
-    return gestore.visualizza_servizi()
-# --- SERVIZI ARCHIVIATI (delega a GestoreBackup tramite GestoreStudio) ---
 
-@router.post("/servizi/{servizio_id}/archivia", response_model=ServizioOut)
-def archivia_servizio(servizio_id: int, db: Session = Depends(get_db)):
+# Inoltra atto al notaio (dipendente tecnico)
+@router.post("/servizi/{servizio_id}/inoltra-notaio")
+def inoltra_servizio_notaio(servizio_id: int, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
-    servizio = gestore.archivia_servizio(servizio_id)
+    servizio = gestore.inoltra_servizio_notaio(servizio_id)
     if not servizio:
-        raise HTTPException(status_code=404, detail="Servizio non trovato")
+        raise HTTPException(status_code=404, detail="Servizio non trovato o non in lavorazione")
     return servizio
 
-@router.put("/servizi/{servizio_id}/modifica-archiviazione", response_model=ServizioOut)
-def modifica_servizio_archiviato(servizio_id: int, statoServizio: bool, db: Session = Depends(get_db)):
+# Lista servizi da approvare (notaio)
+@router.get("/notai/servizi", response_model=list)
+def servizi_da_approvare(db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
-    servizio = gestore.modifica_servizio_archiviato(servizio_id, statoServizio)
+    return gestore.servizi_da_approvare()
+
+# Approva atto (notaio)
+@router.post("/servizi/{servizio_id}/approva")
+def approva_servizio(servizio_id: int, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    servizio = gestore.approva_servizio(servizio_id)
     if not servizio:
-        raise HTTPException(status_code=404, detail="Servizio non trovato")
+        raise HTTPException(status_code=404, detail="Servizio non trovato o non in attesa approvazione")
     return servizio
 
-@router.get("/servizi/archiviati", response_model=List[ServizioOut])
-def visualizza_servizi_archiviati(db: Session = Depends(get_db)):
+# Rifiuta atto (notaio)
+@router.post("/servizi/{servizio_id}/rifiuta")
+def rifiuta_servizio(servizio_id: int, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
-    return gestore.visualizza_servizi_archiviati()
+    servizio = gestore.rifiuta_servizio(servizio_id)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato o non in attesa approvazione")
+    return servizio
 
-# --- DIPENDENTE: LAVORO ASSEGNATO ---
-
-@router.get("/dipendente/{dipendente_id}/servizi", response_model=List[ServizioOut])
-def visualizza_lavoro_da_svolgere(dipendente_id: int, db: Session = Depends(get_db)):
+# Assegna servizio a dipendente (gestore studio)
+@router.put("/servizi/{servizio_id}/assegna")
+def assegna_servizio(servizio_id: int, dipendente_id: int, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
-    return gestore.visualizza_lavoro_da_svolgere(dipendente_id)
+    ok = gestore.assegna_servizio(servizio_id, dipendente_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Servizio o dipendente non trovato")
+    return {"ok": True}
 
-@router.get("/dipendente/{dipendente_id}/servizi_inizializzati", response_model=List[ServizioOut])
-def visualizza_servizi_inizializzati(dipendente_id: int, db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    return gestore.visualizza_servizi_inizializzati(dipendente_id)
 
 # --- DOCUMENTAZIONE ---
 
@@ -255,3 +238,104 @@ async def sostituisci_documentazione(
         data = await file.read()
         f.write(data)
     return gestore.sostituisci_documentazione(doc_id, filename=file.filename, path=path)
+from app.utils.serializers import servizio_to_dict
+
+@router.post("/servizi", response_model=ServizioOut)
+async def crea_servizio(
+        request: Request,
+        cliente_id: int = Form(None),
+        tipo: TipoServizio = Form(None),
+        codiceCorrente: int = Form(None),
+        codiceServizio: int = Form(None),
+        dipendente_id: int = Form(None),
+        db: Session = Depends(get_db)
+):
+    from datetime import datetime
+    if None in (cliente_id, tipo, codiceCorrente, codiceServizio, dipendente_id):
+        try:
+            body = await request.json()
+            cliente_id = body.get("cliente_id", cliente_id)
+            tipo = body.get("tipo", tipo)
+            codiceCorrente = body.get("codiceCorrente", codiceCorrente)
+            codiceServizio = body.get("codiceServizio", codiceServizio)
+            dipendente_id = body.get("dipendente_id", dipendente_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Dati mancanti nella request")
+    for v in [cliente_id, tipo, codiceCorrente, codiceServizio, dipendente_id]:
+        if v is None:
+            raise HTTPException(status_code=422, detail="Tutti i campi sono obbligatori")
+    gestore = GestoreStudio(db)
+    now = datetime.now()
+    servizio = gestore.aggiungi_servizio(
+        cliente_id=cliente_id,
+        tipo=tipo,
+        codiceCorrente=codiceCorrente,
+        codiceServizio=codiceServizio,
+        dataRichiesta=now,
+        dataConsegna=now,
+        dipendente_id=dipendente_id
+    )
+    return servizio_to_dict(servizio)
+
+@router.get("/servizi/", response_model=List[ServizioOut])
+def visualizza_servizi(db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    return [servizio_to_dict(s) for s in gestore.visualizza_servizi()]
+
+@router.get("/servizi/codice/{codice_servizio}", response_model=ServizioOut)
+def cerca_servizio_per_codice(codice_servizio: int, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    servizio = gestore.cerca_servizio_per_codice(codice_servizio)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    return servizio_to_dict(servizio)
+
+@router.get("/servizi", response_model=List[ServizioOut])
+def visualizza_servizi(cliente_id: int = Query(None), db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    if cliente_id is not None:
+        return [servizio_to_dict(s) for s in gestore.visualizza_servizi_cliente(cliente_id)]
+    return [servizio_to_dict(s) for s in gestore.visualizza_servizi()]
+# --- SERVIZI ARCHIVIATI (delega a GestoreBackup tramite GestoreStudio) ---
+@router.post("/servizi/{servizio_id}/archivia", response_model=ServizioOut)
+def archivia_servizio(servizio_id: int, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    servizio = gestore.archivia_servizio(servizio_id)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    return servizio_to_dict(servizio)
+
+@router.put("/servizi/{servizio_id}/modifica-archiviazione", response_model=ServizioOut)
+def modifica_servizio_archiviato(servizio_id: int, statoServizio: bool, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    servizio = gestore.modifica_servizio_archiviato(servizio_id, statoServizio)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    return servizio_to_dict(servizio)
+
+@router.get("/servizi/archiviati", response_model=List[ServizioOut])
+def visualizza_servizi_archiviati(db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    return [servizio_to_dict(s) for s in gestore.visualizza_servizi_archiviati()]
+
+# --- DIPENDENTE: LAVORO ASSEGNATO ---
+@router.get("/dipendente/{dipendente_id}/servizi", response_model=List[ServizioOut])
+def visualizza_lavoro_da_svolgere(dipendente_id: int, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    return [servizio_to_dict(s) for s in gestore.visualizza_lavoro_da_svolgere(dipendente_id)]
+
+@router.get("/dipendente/{dipendente_id}/servizi_inizializzati", response_model=List[ServizioOut])
+def visualizza_servizi_inizializzati(dipendente_id: int, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    return [servizio_to_dict(s) for s in gestore.visualizza_servizi_inizializzati(dipendente_id)]
+@router.patch("/servizi/{servizio_id}", response_model=ServizioOut)
+def modifica_servizio(
+        servizio_id: int,
+        payload: dict = Body(...),
+        db: Session = Depends(get_db)
+):
+    gestore = GestoreStudio(db)
+    servizio = gestore.modifica_servizio(servizio_id, **payload)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    return servizio_to_dict(servizio)
