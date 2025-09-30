@@ -35,10 +35,7 @@ class GestoreStudio:
         ]
 
     def servizi(self):
-        return [
-            s for s in self.db.query(Servizio).all()
-            if s.id not in self._servizi_virtualmente_eliminati
-        ]
+        return self.db.query(Servizio).filter(Servizio.is_deleted == False).all()
 
     # --- Dipendenti e Notai ---
     def aggiungi_dipendente(
@@ -138,9 +135,14 @@ class GestoreStudio:
         return servizio
 
     def elimina_servizio(self, servizio_id: int):
-        """Soft delete: rimuove solo dalla lista virtuale."""
-        print(f"Soft delete servizio: {servizio_id}")
-        self._servizi_virtualmente_eliminati.add(servizio_id)
+        """Soft-delete persistente nel DB"""
+        servizio = self.db.get(Servizio, servizio_id)
+        if not servizio:
+            print(f"[DEBUG] Servizio {servizio_id} non trovato per soft delete")
+            return False
+        servizio.is_deleted = True
+        self.db.commit()
+        print(f"[DEBUG] Servizio {servizio_id} marcato come eliminato (is_deleted=True)")
         return True
 
     def distruggi_servizio(self, servizio_id: int):
@@ -196,6 +198,19 @@ class GestoreStudio:
         self.db.commit()
         self.db.refresh(servizio)
         return servizio
+    def visualizza_servizi_completati(self, dipendente_id: int):
+        dip = self.db.get(DipendenteTecnico, dipendente_id)
+        if not dip:
+         return []
+
+    # Mostra servizi in stati finali
+        servizi = [
+         s for s in dip.servizi
+        if s.statoServizio in [StatoServizio.APPROVATO, StatoServizio.RIFIUTATO, StatoServizio.CONSEGNATO]
+           and not s.is_deleted
+        ]
+        print(f"Servizi completati per dipendente {dipendente_id}: {[s.id for s in servizi]}")
+        return servizi
 
     def inoltra_servizio_notaio(self, servizio_id: int):
         servizio = self.db.get(Servizio, servizio_id)

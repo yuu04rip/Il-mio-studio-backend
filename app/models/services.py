@@ -21,6 +21,5 @@ class Servizio(Base):
     tipo: Mapped[TipoServizio] = mapped_column(Enum(TipoServizio), nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # RELAZIONE MOLTI-A-MOLTI!
     dipendenti = relationship("DipendenteTecnico", secondary=dipendente_servizio, back_populates="servizi")
     lavoroCaricato = relationship("Documentazione", secondary="servizio_documentazione", back_populates="servizi")

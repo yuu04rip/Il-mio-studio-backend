@@ -11,11 +11,11 @@ from app.models.dipendente import DipendenteTecnico
 from app.models.notaio import Notaio
 from app.models.services import Servizio
 from app.models.documentazione import Documentazione
-from app.models.enums import TipoDipendenteTecnico, TipoServizio, TipoDocumentazione
+from app.models.enums import TipoDipendenteTecnico, TipoServizio, TipoDocumentazione, StatoServizio
 from app.schemas.user import UserCreate
-from app.schemas.dipendente import DipendenteTecnicoOut
+from app.schemas.dipendente import DipendenteTecnicoOut, DipendenteTecnicoDettagliOut
 from app.schemas.notaio import NotaioOut
-from app.schemas.cliente import ClienteOut
+from app.schemas.cliente import ClienteOut, ClienteDettagliOut
 from app.schemas.services import ServizioOut
 from app.schemas.document import DocumentazioneOut
 
@@ -124,14 +124,16 @@ async def richiesta_servizio_chat(
 
 @router.delete("/servizi/{servizio_id}")
 def elimina_servizio(servizio_id: int, db: Session = Depends(get_db)):
-    """
-    SOFT DELETE: Rimuove il servizio solo dalla lista (non dal database).
-    """
     gestore = GestoreStudio(db)
     ok = gestore.elimina_servizio(servizio_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Servizio non trovato nella lista")
     return {"ok": True}
+
+@router.get("/servizi/", response_model=List[ServizioOut])
+def visualizza_servizi(db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    return [servizio_to_dict(s) for s in gestore.visualizza_servizi()]
 
 @router.delete("/servizi/{servizio_id}/distruggi")
 def distruggi_servizio(servizio_id: int, db: Session = Depends(get_db)):
@@ -165,8 +167,9 @@ def inoltra_servizio_notaio(servizio_id: int, db: Session = Depends(get_db)):
 @router.get("/notai/servizi", response_model=list)
 def servizi_da_approvare(db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
-    return gestore.servizi_da_approvare()
-
+    servizi = gestore.servizi_da_approvare()
+    # Serializza ogni servizio!
+    return [servizio_to_dict(s) for s in servizi]
 # Approva atto (notaio)
 @router.post("/servizi/{servizio_id}/approva")
 def approva_servizio(servizio_id: int, db: Session = Depends(get_db)):
@@ -277,11 +280,6 @@ async def crea_servizio(
     )
     return servizio_to_dict(servizio)
 
-@router.get("/servizi/", response_model=List[ServizioOut])
-def visualizza_servizi(db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    return [servizio_to_dict(s) for s in gestore.visualizza_servizi()]
-
 @router.get("/servizi/codice/{codice_servizio}", response_model=ServizioOut)
 def cerca_servizio_per_codice(codice_servizio: int, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
@@ -328,6 +326,23 @@ def visualizza_lavoro_da_svolgere(dipendente_id: int, db: Session = Depends(get_
 def visualizza_servizi_inizializzati(dipendente_id: int, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
     return [servizio_to_dict(s) for s in gestore.visualizza_servizi_inizializzati(dipendente_id)]
+@router.get("/dipendente/{dipendente_id}/servizi_finalizzati", response_model=List[ServizioOut])
+def visualizza_servizi_finalizzati(dipendente_id: int, db: Session = Depends(get_db)):
+    gestore = GestoreStudio(db)
+    dip = db.get(DipendenteTecnico, dipendente_id)
+    if not dip:
+        raise HTTPException(status_code=404, detail="Dipendente tecnico non trovato")
+    # Prendi tutti i servizi associati al dipendente con stato APPROVATO o RIFIUTATO
+    servizi = [s for s in dip.servizi if str(s.statoServizio).lower() in ("approvato", "rifiutato")]
+    from app.utils.serializers import servizio_to_dict
+    return [servizio_to_dict(s) for s in servizi]
+@router.get("/dipendente/{dipendente_id}/servizi_completati", response_model=List[ServizioOut])
+def visualizza_servizi_completati(dipendente_id: int, db: Session = Depends(get_db)):
+    """
+    Servizi in stati APPROVATO, RIFIUTATO, CONSEGNATO
+    """
+    gestore = GestoreStudio(db)
+    return [servizio_to_dict(s) for s in gestore.visualizza_servizi_completati(dipendente_id)]
 @router.patch("/servizi/{servizio_id}", response_model=ServizioOut)
 def modifica_servizio(
         servizio_id: int,
@@ -339,3 +354,72 @@ def modifica_servizio(
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     return servizio_to_dict(servizio)
+@router.get("/servizi/{servizio_id}", response_model=ServizioOut)
+def get_servizio(servizio_id: int, db: Session = Depends(get_db)):
+    """
+    Ritorna i dettagli di un singolo servizio (GET /servizi/{servizio_id}).
+    """
+    servizio = db.get(Servizio, servizio_id)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    from app.utils.serializers import servizio_to_dict
+    return servizio_to_dict(servizio)
+from fastapi.encoders import jsonable_encoder
+
+@router.get("/clienti/{cliente_id}/dettagli", response_model=ClienteDettagliOut)
+def get_cliente_dettagli(cliente_id: int, db: Session = Depends(get_db)):
+    cliente = db.get(Cliente, cliente_id)
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    utente = cliente.utente
+    return {
+        "id": cliente.id,
+        "nome": utente.nome if utente else None,
+        "cognome": utente.cognome if utente else None,
+        "email": utente.email if utente else None,
+        "numeroTelefonico": utente.numeroTelefonico if utente else None,
+    }
+
+@router.get("/dipendente/{dipendente_id}/dettagli", response_model=DipendenteTecnicoDettagliOut)
+def get_dipendente_dettagli(dipendente_id: int, db: Session = Depends(get_db)):
+    dip = db.get(DipendenteTecnico, dipendente_id)
+    if not dip:
+        raise HTTPException(status_code=404, detail="Dipendente tecnico non trovato")
+    utente = dip.utente
+    return {
+        "id": dip.id,
+        "nome": utente.nome if utente else None,
+        "cognome": utente.cognome if utente else None,
+        "email": utente.email if utente else None,
+        "numeroTelefonico": utente.numeroTelefonico if utente else None,
+        "tipo": dip.tipo,
+    }
+@router.get("/servizi/{servizio_id}/dipendenti", response_model=List[DipendenteTecnicoDettagliOut])
+def get_dipendenti_servizio(servizio_id: int, db: Session = Depends(get_db)):
+    servizio = db.get(Servizio, servizio_id)
+    if not servizio:
+        raise HTTPException(status_code=404, detail="Servizio non trovato")
+    # servizio.dipendenti è la relazione molti-a-molti
+    dipendenti = servizio.dipendenti
+    # Serializza ogni dipendente con i dati estesi
+    result = []
+    for dip in dipendenti:
+        utente = dip.utente
+        result.append({
+            "id": dip.id,
+            "nome": utente.nome if utente else None,
+            "cognome": utente.cognome if utente else None,
+            "email": utente.email if utente else None,
+            "numeroTelefonico": utente.numeroTelefonico if utente else None,
+            "tipo": dip.tipo,
+        })
+    return result
+@router.get("/clienti/{cliente_id}/servizi_approvati", response_model=List[ServizioOut])
+def get_servizi_approvati_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    """Restituisce tutti i servizi APPROVATI per un certo cliente."""
+    servizi = db.query(Servizio).filter(
+        Servizio.cliente_id == cliente_id,
+        Servizio.statoServizio == StatoServizio.APPROVATO,
+        Servizio.is_deleted == False
+    ).all()
+    return [servizio_to_dict(s) for s in servizi]
