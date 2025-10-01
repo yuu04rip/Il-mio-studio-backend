@@ -19,8 +19,17 @@ class TipoDipendenteTecnico(str, enum.Enum):
     NOTAIO = "notaio"
     CONTABILE = "contabile"
     ASSISTENTE = "assistente"
+    DIPENDENTE = "dipendente"
 
 class Role(str, enum.Enum):
     CLIENTE = "cliente"
     NOTAIO = "notaio"
     DIPENDENTE = "dipendente"
+
+class StatoServizio(str, enum.Enum):
+    CREATO = "creato"
+    IN_LAVORAZIONE = "in_lavorazione"
+    IN_ATTESA_APPROVAZIONE = "in_attesa_approvazione"
+    APPROVATO = "approvato"
+    RIFIUTATO = "rifiutato"
+    CONSEGNATO = "consegnato"

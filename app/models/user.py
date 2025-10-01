@@ -16,5 +16,5 @@ class User(Base):
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     cliente = relationship("Cliente", uselist=False, back_populates="utente")
-    notaio = relationship("Notaio", uselist=False, back_populates="utente")
-    dipendente = relationship("DipendenteTecnico", uselist=False, back_populates="utente")
+    notaio = relationship("Notaio", uselist=False, back_populates="utente", overlaps="dipendente")
+    dipendente = relationship("DipendenteTecnico", uselist=False, back_populates="utente", overlaps="notaio")

@@ -1,6 +1,8 @@
+from typing import Optional, List
+
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
-from app.models.enums import TipoServizio
+from app.models.enums import TipoServizio, StatoServizio
 
 class ServizioOut(BaseModel):
     id: int
@@ -9,8 +11,10 @@ class ServizioOut(BaseModel):
     codiceServizio: int
     dataConsegna: datetime
     dataRichiesta: datetime
-    statoServizio: bool
+    statoServizio: StatoServizio
     tipo: TipoServizio
+    is_deleted: bool
+    dipendenti: List[int]
 
     @field_serializer('dataConsegna', 'dataRichiesta')
     def serialize_datetime(self, value: datetime, _info):
