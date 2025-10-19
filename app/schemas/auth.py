@@ -9,7 +9,7 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
     codice_notarile: int | None = None
-    ruolo: str | None = None   # <--- aggiungi questa riga!
+    ruolo: str | None = None
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -17,7 +17,7 @@ class RegisterRequest(BaseModel):
     nome: str
     cognome: str
     numeroTelefonico: str | None = None
-    ruolo: str | None = None  # "cliente" (default) oppure "dipendente"/"notaio"
+    ruolo: str | None = None
 
 class ChangeEmailRequest(BaseModel):
     email: str

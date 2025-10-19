@@ -6,7 +6,7 @@ from app.core.security import hash_password, verify_password
 class GestoreLogin:
     def __init__(self, db: Session):
         self.db = db
-        self.utente_corrente = None  # opzionale, utile se vuoi salvare chi ha fatto login
+        self.utente_corrente = None
 
     def lista_utenti(self):
         return self.db.query(User).all()
