@@ -1,6 +1,8 @@
 # Il Mio Studio Backend
 
-Backend per la gestione dello studio legale/notarile, basato su FastAPI, SQLAlchemy e Pydantic v2.
+Backend per la gestione di uno studio legale/notarile, basato su **FastAPI**, **SQLAlchemy** e **Pydantic v2**.
+
+---
 
 ## 🏗️ Struttura del progetto
 
@@ -65,49 +67,76 @@ Il-mio-studio-backend/
 ├── test.db
 ```
 
+---
+
 ## 🚀 Avvio rapido
 
-1. **Installa le dipendenze**
-    ```bash
-    pip install -r requirements.txt
-    ```
+### 1. Installa le dipendenze
 
-2. **Configura variabili d'ambiente**
-   Crea il file `.env`:
-    ```
-    SECRET_KEY=la-tua-secret-key-lunga-e-casuale
-    DATABASE_URL=mysql+mysqlconnector://user:password@localhost:3306/utenti
-    ```
-   > Puoi usare anche SQLite per sviluppo, ma per produzione raccomandato MySQL/PostgreSQL.
+```bash
+pip install -r requirements.txt
+```
 
-3. **Applica le migrazioni (consigliato in produzione)**
-    ```bash
-    alembic upgrade head
-    ```
+### 2. Configura variabili d'ambiente
 
-4. **Avvia il server**
-    ```bash
-    uvicorn main:app --reload
-    ```
+Crea il file `.env` con:
+```
+SECRET_KEY=la-tua-secret-key-lunga-e-casuale
+DATABASE_URL=mysql+mysqlconnector://user:password@localhost:3306/utenti
+```
+> Puoi usare anche SQLite per sviluppo (`sqlite:///test.db`), ma per produzione raccomandato **MySQL** o **PostgreSQL**.
 
-5. **Documentazione API**
-    - Interattiva: [http://localhost:8000/docs](http://localhost:8000/docs)
+### 3. Applica le migrazioni (consigliato in produzione)
+
+```bash
+alembic upgrade head
+```
+
+### 4. Avvia il server
+
+```bash
+uvicorn main:app --reload
+```
+
+### 5. Documentazione API
+
+- Interattiva: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+## 🗂️ Suddivisione delle responsabilità (consigliata)
+
+Organizza il lavoro tra i membri del team, ad esempio:
+
+- **API & routes:** gestione endpoints, autenticazione, servizi, documenti, utenti
+- **Models:** DB, tabelle, relazioni, enums
+- **Schemas:** validazione input/output API
+- **Alembic:** gestione migrazioni database
+- **Tests:** test automatici per endpoints e modelli
+
+Scrivi nei commenti dei file chi è responsabile di una sezione (`# Responsabile: nome`).
+
+---
 
 ## 🔑 Note Pydantic v2
 
-> Se usi Pydantic v2, nei tuoi schemas metti:
-> ```python
-> class Config:
->     from_attributes = True
-> ```
+Se usi Pydantic v2 nei tuoi schemas, ricorda di aggiungere:
+```python
+class Config:
+    from_attributes = True
+```
+
+---
 
 ## 🧪 Test automatici
 
-Metti i test in `tests/test_app.py` (e altri test come preferisci).
+Metti i test in `tests/` (es: `tests/test_app.py`).
 Avvia i test con:
 ```bash
 pytest
 ```
+
+---
 
 ## 📂 Database
 
@@ -115,6 +144,7 @@ Le tabelle vengono create all’avvio tramite:
 ```python
 Base.metadata.create_all(bind=engine)
 ```
+
 **Per produzione usa Alembic per le migrazioni!**
 - Genera una nuova migration:
   ```bash
@@ -125,6 +155,8 @@ Base.metadata.create_all(bind=engine)
   alembic upgrade head
   ```
 
+---
+
 ## 🛠️ Endpoints principali
 
 - `/auth/register` - Registrazione utente
@@ -132,6 +164,8 @@ Base.metadata.create_all(bind=engine)
 - `/users/me` - Info utente autenticato
 - `/documents` - Upload e gestione documenti
 - `/` - Status app
+
+---
 
 ## 📦 Reset database (dev)
 
@@ -151,6 +185,14 @@ SET FOREIGN_KEY_CHECKS = 1;
 ```
 > **Attenzione:** Incolla tutto il blocco su phpMyAdmin o nel client MySQL, **non riga per riga**.
 
+---
+
 ## 🤝 Contributi
 
-Apri una issue o una pull request!
+- Apri una **issue** per segnalare bug, domande o proposte.
+- Fai una **pull request** per proporre modifiche o nuove funzionalità.
+- **Commenta i tuoi file e le tue funzioni** per aiutare il team a collaborare meglio!
+
+---
+
+**Buon lavoro backend!**

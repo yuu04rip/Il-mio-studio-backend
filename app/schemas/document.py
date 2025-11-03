@@ -6,7 +6,6 @@ class DocumentazioneOut(BaseModel):
     id: int
     filename: str
     tipo: TipoDocumentazione
-    path: str
     created_at: datetime
 
     @field_serializer('created_at')

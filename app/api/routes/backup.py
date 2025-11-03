@@ -5,14 +5,13 @@ from app.api.deps import get_db
 from app.services.gestore_backup import GestoreBackup
 from app.models.services import Servizio
 from app.schemas.services import ServizioOut
-from app.services.gestore_studio import GestoreStudio
 
 router = APIRouter()
 
 @router.post("/backup/inizializza")
 def inizializza_backup(db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    gestore.inizializza_archiviazione()
+    backup = GestoreBackup(db)
+    backup.setup_backup()
     return {"msg": "Backup inizializzato correttamente"}
 
 @router.post("/archivia-servizio/{servizio_id}", response_model=ServizioOut)
