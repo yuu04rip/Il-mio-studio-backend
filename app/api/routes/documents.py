@@ -1,3 +1,5 @@
+from typing import List
+
 import io
 from mimetypes import guess_type
 from urllib.parse import quote
@@ -15,9 +17,11 @@ from app.services.gestore_studio import GestoreStudio
 
 router = APIRouter()
 
-@router.get("/servizi/{servizio_id}/documenti", response_model=list[DocumentazioneOut])
+
+@router.get("/servizi/{servizio_id}/documenti", response_model=List[DocumentazioneOut])
 def visualizza_documentazione_servizio(servizio_id: int, db: Session = Depends(get_db)):
     return db.query(Documentazione).filter(Documentazione.servizio_id == servizio_id).all()
+
 
 @router.post("/servizi/{servizio_id}/documenti/carica", response_model=DocumentazioneOut)
 async def carica_documentazione_servizio(
@@ -44,6 +48,7 @@ async def carica_documentazione_servizio(
         db.commit()
     return doc
 
+
 @router.put("/servizi/{servizio_id}/documenti/{doc_id}/sostituisci", response_model=DocumentazioneOut)
 async def sostituisci_documentazione_servizio(
         servizio_id: int,
@@ -62,6 +67,7 @@ async def sostituisci_documentazione_servizio(
         servizio.lavoroCaricato.append(doc)
         db.commit()
     return doc
+
 
 @router.get("/download/{doc_id}")
 def download_documentazione(doc_id: int, db: Session = Depends(get_db)):
@@ -82,6 +88,7 @@ def download_documentazione(doc_id: int, db: Session = Depends(get_db)):
         headers={"Content-Disposition": content_disposition}
     )
 
+
 @router.delete("/servizi/{servizio_id}/documenti/{doc_id}", response_model=DocumentazioneOut)
 def elimina_documentazione_servizio(
         servizio_id: int,
@@ -96,4 +103,65 @@ def elimina_documentazione_servizio(
         servizio.lavoroCaricato.remove(doc)
     db.delete(doc)
     db.commit()
+    return doc
+
+
+# --- Nuovi endpoint per l'API frontend (client-level) ---
+
+@router.post("/documenti/carica", response_model=DocumentazioneOut)
+async def carica_documentazione_cliente(
+        cliente_id: int = Form(...),
+        tipo: TipoDocumentazione = Form(...),
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db)
+):
+    """
+    Endpoint chiamato dal frontend:
+    client: carica_documentazione_cliente(self, cliente_id, tipo, filepath)
+    - riceve cliente_id e tipo via form e un file multipart
+    - salva la documentazione con servizio_id = None
+    """
+    data = await file.read()
+    gestore = GestoreStudio(db)
+    # servizio_id = None perché è documentazione legata al cliente, non ad un servizio specifico
+    doc = gestore.aggiungi_documentazione(
+        cliente_id=cliente_id,
+        servizio_id=None,
+        filename=file.filename,
+        tipo=tipo,
+        data=data
+    )
+    # Non ci sono relazioni con Servizio da gestire qui.
+    return doc
+
+
+@router.get("/documenti/visualizza/{cliente_id}", response_model=List[DocumentazioneOut])
+def visualizza_documentazione_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    """
+    Endpoint chiamato dal frontend:
+    client: visualizza_documentazione_cliente(self, cliente_id)
+    - restituisce tutte le documentazioni associate al cliente (servizio_id può essere anche None)
+    """
+    return db.query(Documentazione).filter(Documentazione.cliente_id == cliente_id).all()
+
+
+@router.put("/documenti/sostituisci/{doc_id}", response_model=DocumentazioneOut)
+async def sostituisci_documentazione_cliente(
+        doc_id: int,
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db)
+):
+    """
+    Endpoint chiamato dal frontend:
+    client: sostituisci_documentazione_cliente(self, doc_id, filepath)
+    - sostituisce i dati del documento indicato (indipendentemente da servizio/cliente)
+    """
+    doc = db.get(Documentazione, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento non trovato")
+    data = await file.read()
+    gestore = GestoreStudio(db)
+    doc = gestore.sostituisci_documentazione(doc_id, filename=file.filename, data=data)
+    # Se il documento è collegato ad un servizio e serve mantenerlo nella relazione, GestoreStudio dovrebbe
+    # già aggiornare gli oggetti mappati; altrimenti eventuale logica aggiuntiva può essere inserita qui.
     return doc
