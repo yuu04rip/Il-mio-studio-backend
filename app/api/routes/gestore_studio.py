@@ -357,3 +357,4 @@ def get_servizi_approvati_cliente(cliente_id: int, db: Session = Depends(get_db)
         Servizio.is_deleted == False
     ).all()
     return [servizio_to_dict(s) for s in servizi]
+#cuheriue
