@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.models.user import User, Role
 from app.models.cliente import Cliente
@@ -53,18 +54,79 @@ class GestoreStudio:
         return self.db.query(Cliente).join(Cliente.utente).filter(User.nome == nome).first()
 
     def search_clienti(self, q: str):
-        return self.db.query(Cliente).join(Cliente.utente).filter(
-            (User.nome.ilike(f"%{q}%")) | (User.cognome.ilike(f"%{q}%"))
-        ).all()
+            """
+            Cerca clienti per nome o cognome e restituisce una lista di dict
+            con i campi minimi utili al frontend: id, nome, cognome, email.
+            """
+            if not q:
+                return []
+
+            qlike = f"%{q}%"
+            # join Cliente -> User (assumendo relazione cliente.utente)
+            clienti = (
+                self.db.query(Cliente)
+                .join(Cliente.utente)  # relazione ORM: Cliente.utente
+                .filter(
+                    (User.nome.ilike(qlike)) |
+                    (User.cognome.ilike(qlike))
+                )
+                .all()
+            )
+
+            results = []
+            for c in clienti:
+                u = getattr(c, "utente", None)
+                results.append({
+                    "id": getattr(c, "id", None),
+                    "nome": getattr(u, "nome", "") if u else "",
+                    "cognome": getattr(u, "cognome", "") if u else "",
+                    "email": getattr(u, "email", "") if u else ""
+                })
+            return results
 
     # --- Servizi ---
+    def _generate_codice_servizio(self) -> str:
+        """
+        Usa la sequence Postgres servizio_code_seq per generare
+        codice nel formato SERV-000123
+        """
+        try:
+            seq = self.db.execute(text("SELECT nextval('servizio_code_seq')")).scalar()
+            codice = f"SERV-{int(seq):06d}"
+            return codice
+        except Exception:
+            # fallback: genera codice temporaneo con timestamp se la sequence non è disponibile
+            from datetime import datetime
+            ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            return f"SERV-{ts}"
+
     def aggiungi_servizio(self, cliente_id, tipo, codiceCorrente, codiceServizio,
                           dataRichiesta, dataConsegna, dipendente_id=None):
+        # Popola snapshot nome/cognome cliente (se possibile)
+        cliente_nome = None
+        cliente_cognome = None
+        try:
+            cliente = self.db.get(Cliente, cliente_id)
+            if cliente and getattr(cliente, "utente_id", None):
+                user = self.db.get(User, cliente.utente_id)
+                if user:
+                    cliente_nome = user.nome
+                    cliente_cognome = user.cognome
+        except Exception:
+            cliente_nome = None
+            cliente_cognome = None
+
+        # se codiceServizio non fornito o None -> generalo automaticamente
+        if not codiceServizio:
+            codiceServizio = self._generate_codice_servizio()
+
         servizio = Servizio(
             cliente_id=cliente_id,
             tipo=tipo,
             codiceCorrente=codiceCorrente,
             codiceServizio=codiceServizio,
+            cliente_nome=cliente_nome,
+            cliente_cognome=cliente_cognome,
             statoServizio=StatoServizio.CREATO,
             dataRichiesta=dataRichiesta,
             dataConsegna=dataConsegna,
@@ -96,7 +158,8 @@ class GestoreStudio:
         self.db.commit()
         return True
 
-    def cerca_servizio_per_codice(self, codice_servizio: int):
+    def cerca_servizio_per_codice(self, codice_servizio: str):
+        # codice_servizio ora stringa (es. "SERV-000123")
         return self.db.query(Servizio).filter(Servizio.codiceServizio == codice_servizio).first()
 
     def visualizza_servizi(self):

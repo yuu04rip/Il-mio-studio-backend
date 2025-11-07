@@ -12,7 +12,7 @@ from app.models.services import Servizio
 from app.models.enums import TipoServizio, StatoServizio
 from app.schemas.dipendente import DipendenteTecnicoOut, DipendenteTecnicoDettagliOut
 from app.schemas.notaio import NotaioOut
-from app.schemas.cliente import ClienteOut, ClienteDettagliOut
+from app.schemas.cliente import ClienteOut, ClienteDettagliOut, ClienteSearchOut
 from app.schemas.services import ServizioOut
 from app.utils.serializers import servizio_to_dict
 
@@ -58,7 +58,7 @@ def get_clienti(db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
     return gestore.get_clienti()
 
-@router.get("/clienti/search/", response_model=List[ClienteOut])
+@router.get("/clienti/search/", response_model=List[ClienteSearchOut])
 def search_clienti(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
     return gestore.search_clienti(q)
@@ -128,7 +128,7 @@ def inizializza_servizio(servizio_id: int, db: Session = Depends(get_db)):
     servizio = gestore.inizializza_servizio(servizio_id)
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato o già inizializzato")
-    return servizio
+    return servizio_to_dict(servizio)
 
 @router.post("/servizi/{servizio_id}/inoltra-notaio")
 def inoltra_servizio_notaio(servizio_id: int, db: Session = Depends(get_db)):
@@ -136,7 +136,7 @@ def inoltra_servizio_notaio(servizio_id: int, db: Session = Depends(get_db)):
     servizio = gestore.inoltra_servizio_notaio(servizio_id)
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato o non in lavorazione")
-    return servizio
+    return servizio_to_dict(servizio)
 
 @router.get("/notai/servizi", response_model=list)
 def tutti_servizi_notaio(db: Session = Depends(get_db)):
@@ -150,7 +150,7 @@ def approva_servizio(servizio_id: int, db: Session = Depends(get_db)):
     servizio = gestore.approva_servizio(servizio_id)
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato o non in attesa approvazione")
-    return servizio
+    return servizio_to_dict(servizio)
 
 @router.post("/servizi/{servizio_id}/rifiuta")
 def rifiuta_servizio(servizio_id: int, db: Session = Depends(get_db)):
@@ -158,7 +158,7 @@ def rifiuta_servizio(servizio_id: int, db: Session = Depends(get_db)):
     servizio = gestore.rifiuta_servizio(servizio_id)
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato o non in attesa approvazione")
-    return servizio
+    return servizio_to_dict(servizio)
 
 @router.put("/servizi/{servizio_id}/assegna")
 def assegna_servizio(servizio_id: int, dipendente_id: int, db: Session = Depends(get_db)):
@@ -178,39 +178,44 @@ async def crea_servizio(
         cliente_id: int = None,
         tipo: TipoServizio = None,
         codiceCorrente: int = None,
-        codiceServizio: int = None,
+        codiceServizio: str = None,  # ora opzionale e stringa
         dipendente_id: int = None,
         db: Session = Depends(get_db)
 ):
     from datetime import datetime
-    if None in (cliente_id, tipo, codiceCorrente, codiceServizio, dipendente_id):
-        try:
-            body = await request.json()
-            cliente_id = body.get("cliente_id", cliente_id)
-            tipo = body.get("tipo", tipo)
-            codiceCorrente = body.get("codiceCorrente", codiceCorrente)
-            codiceServizio = body.get("codiceServizio", codiceServizio)
-            dipendente_id = body.get("dipendente_id", dipendente_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Dati mancanti nella request")
-    for v in [cliente_id, tipo, codiceCorrente, codiceServizio, dipendente_id]:
+    # Supporta sia form params che JSON body
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    cliente_id = body.get("cliente_id", cliente_id)
+    tipo = body.get("tipo", tipo)
+    codiceCorrente = body.get("codiceCorrente", codiceCorrente)
+    codiceServizio = body.get("codiceServizio", codiceServizio)
+    dipendente_id = body.get("dipendente_id", dipendente_id)
+
+    # ora non richiediamo codiceServizio; lo genera il backend se mancante
+    for v_name, v in (("cliente_id", cliente_id), ("tipo", tipo), ("codiceCorrente", codiceCorrente)):
         if v is None:
-            raise HTTPException(status_code=422, detail="Tutti i campi sono obbligatori")
+            raise HTTPException(status_code=422, detail=f"Campo obbligatorio mancante: {v_name}")
+
     gestore = GestoreStudio(db)
     now = datetime.now()
     servizio = gestore.aggiungi_servizio(
         cliente_id=cliente_id,
         tipo=tipo,
         codiceCorrente=codiceCorrente,
-        codiceServizio=codiceServizio,
+        codiceServizio=codiceServizio,  # se None, gestore lo genererà
         dataRichiesta=now,
         dataConsegna=now,
         dipendente_id=dipendente_id
     )
     return servizio_to_dict(servizio)
 
+# sostituisci la route esistente /servizi/codice/{codice_servizio}
 @router.get("/servizi/codice/{codice_servizio}", response_model=ServizioOut)
-def cerca_servizio_per_codice(codice_servizio: int, db: Session = Depends(get_db)):
+def cerca_servizio_per_codice(codice_servizio: str, db: Session = Depends(get_db)):
     gestore = GestoreStudio(db)
     servizio = gestore.cerca_servizio_per_codice(codice_servizio)
     if not servizio:

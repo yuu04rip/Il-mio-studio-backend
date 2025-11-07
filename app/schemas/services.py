@@ -1,5 +1,4 @@
-from typing import  List
-
+from typing import  List, Optional
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
 from app.models.enums import TipoServizio, StatoServizio
@@ -8,7 +7,9 @@ class ServizioOut(BaseModel):
     id: int
     cliente_id: int
     codiceCorrente: int
-    codiceServizio: int
+    codiceServizio: str   # ora stringa
+    clienteNome: Optional[str] = None
+    clienteCognome: Optional[str] = None
     dataConsegna: datetime
     dataRichiesta: datetime
     statoServizio: StatoServizio
