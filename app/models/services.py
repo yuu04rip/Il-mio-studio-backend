@@ -1,3 +1,4 @@
+import sqlalchemy as sa
 from sqlalchemy import Enum, Integer, DateTime, ForeignKey, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
@@ -27,6 +28,7 @@ class Servizio(Base):
     statoServizio: Mapped[StatoServizio] = mapped_column(Enum(StatoServizio), default=StatoServizio.CREATO, nullable=False)
     tipo: Mapped[TipoServizio] = mapped_column(Enum(TipoServizio), nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa.text('0'))
 
     dipendenti = relationship("DipendenteTecnico", secondary=dipendente_servizio, back_populates="servizi")
     lavoroCaricato = relationship("Documentazione", secondary="servizio_documentazione", back_populates="servizi")

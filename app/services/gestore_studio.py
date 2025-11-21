@@ -1,6 +1,11 @@
-from sqlalchemy import text
+from typing import Optional
+
+from sqlalchemy import text, select, insert, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from app.models.user import User, Role
+
+from app.models.cliente_counters import ClienteCounters
+from app.models.user import User
 from app.models.cliente import Cliente
 from app.models.dipendente import DipendenteTecnico
 from app.models.notaio import Notaio
@@ -54,55 +59,99 @@ class GestoreStudio:
         return self.db.query(Cliente).join(Cliente.utente).filter(User.nome == nome).first()
 
     def search_clienti(self, q: str):
-            """
-            Cerca clienti per nome o cognome e restituisce una lista di dict
-            con i campi minimi utili al frontend: id, nome, cognome, email.
-            """
-            if not q:
-                return []
+        """
+        Cerca clienti per nome o cognome e restituisce una lista di dict
+        con i campi minimi utili al frontend: id, nome, cognome, email.
+        """
+        if not q:
+            return []
 
-            qlike = f"%{q}%"
-            # join Cliente -> User (assumendo relazione cliente.utente)
-            clienti = (
-                self.db.query(Cliente)
-                .join(Cliente.utente)  # relazione ORM: Cliente.utente
-                .filter(
-                    (User.nome.ilike(qlike)) |
-                    (User.cognome.ilike(qlike))
-                )
-                .all()
+        qlike = f"%{q}%"
+        # join Cliente -> User (assumendo relazione cliente.utente)
+        clienti = (
+            self.db.query(Cliente)
+            .join(Cliente.utente)  # relazione ORM: Cliente.utente
+            .filter(
+                (User.nome.ilike(qlike)) |
+                (User.cognome.ilike(qlike))
             )
+            .all()
+        )
 
-            results = []
-            for c in clienti:
-                u = getattr(c, "utente", None)
-                results.append({
-                    "id": getattr(c, "id", None),
-                    "nome": getattr(u, "nome", "") if u else "",
-                    "cognome": getattr(u, "cognome", "") if u else "",
-                    "email": getattr(u, "email", "") if u else ""
-                })
-            return results
+        results = []
+        for c in clienti:
+            u = getattr(c, "utente", None)
+            results.append({
+                "id": getattr(c, "id", None),
+                "nome": getattr(u, "nome", "") if u else "",
+                "cognome": getattr(u, "cognome", "") if u else "",
+                "email": getattr(u, "email", "") if u else ""
+            })
+        return results
 
     # --- Servizi ---
-    def _generate_codice_servizio(self) -> str:
-        """
-        Usa la sequence Postgres servizio_code_seq per generare
-        codice nel formato SERV-000123
-        """
+    # modifica _generate_codice_servizio: rimane come prima ma chiarire il return
+    def _generate_codice_servizio(self) -> tuple[str, Optional[int]]:
+        from datetime import datetime
+        # Try Postgres-style nextval
         try:
             seq = self.db.execute(text("SELECT nextval('servizio_code_seq')")).scalar()
-            codice = f"SERV-{int(seq):06d}"
-            return codice
+            if seq is not None:
+                codice = f"SERV-{int(seq):06d}"
+                return codice, int(seq)
         except Exception:
-            # fallback: genera codice temporaneo con timestamp se la sequence non è disponibile
-            from datetime import datetime
-            ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-            return f"SERV-{ts}"
+            pass
 
-    def aggiungi_servizio(self, cliente_id, tipo, codiceCorrente, codiceServizio,
-                          dataRichiesta, dataConsegna, dipendente_id=None):
-        # Popola snapshot nome/cognome cliente (se possibile)
+        # Try MySQL / MariaDB: INSERT INTO servizio_code_seq () VALUES (); SELECT LAST_INSERT_ID();
+        try:
+            self.db.execute(text("INSERT INTO servizio_code_seq () VALUES ();"))
+            last = self.db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+            if last:
+                seq_id = int(last)
+                codice = f"SERV-{seq_id:06d}"
+                return codice, seq_id
+        except Exception:
+            pass
+
+        # fallback: timestamp (seq_id=None)
+        ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        return f"SERV-{ts}", None
+
+    def _get_next_codice_corrente_for_cliente(self, cliente_id: int) -> int:
+        """
+        Restituisce il prossimo codiceCorrente per il cliente (atomico).
+        Questa funzione NON apre una transazione propria: deve essere chiamata
+        dentro una transazione (es. with self.db.begin()) che garantisca il lock.
+        """
+        try:
+            # leggi riga con lock FOR UPDATE (assume che il caller abbia begun la transaction)
+            row = self.db.execute(
+                select(ClienteCounters).where(ClienteCounters.cliente_id == cliente_id).with_for_update()
+            ).scalar_one_or_none()
+
+            if row is None:
+                # non esiste: inseriamo riga con last_value = 2 (next sarà 1 restituito, next disponibile = 2)
+                self.db.execute(
+                    insert(ClienteCounters).values(cliente_id=cliente_id, last_value=2)
+                )
+                return 1
+            else:
+                # last_value contiene il NEXT da restituire
+                next_val = int(row.last_value)
+                # incrementa last_value -> next_val + 1
+                self.db.execute(
+                    update(ClienteCounters)
+                    .where(ClienteCounters.cliente_id == cliente_id)
+                    .values(last_value=next_val + 1)
+                )
+                return next_val
+        except     SQLAlchemyError:
+            # log ed eventualmente rilancia
+            raise
+
+    def aggiungi_servizio(self, cliente_id, tipo, codiceCorrente=None, codiceServizio=None,
+                          dataRichiesta=None, dataConsegna=None, dipendente_id=None):
+        # snapshot cliente
         cliente_nome = None
         cliente_cognome = None
         try:
@@ -116,31 +165,46 @@ class GestoreStudio:
             cliente_nome = None
             cliente_cognome = None
 
-        # se codiceServizio non fornito o None -> generalo automaticamente
-        if not codiceServizio:
-            codiceServizio = self._generate_codice_servizio()
+        try:
+            # Una sola transazione che include il lock per cliente_counters e la creazione del servizio
+            with self.db.begin():
+                # se manca codiceCorrente -> ottieni il prossimo per il cliente (atomico)
+                if not codiceCorrente:
+                    codiceCorrente = self._get_next_codice_corrente_for_cliente(cliente_id)
 
-        servizio = Servizio(
-            cliente_id=cliente_id,
-            tipo=tipo,
-            codiceCorrente=codiceCorrente,
-            codiceServizio=codiceServizio,
-            cliente_nome=cliente_nome,
-            cliente_cognome=cliente_cognome,
-            statoServizio=StatoServizio.CREATO,
-            dataRichiesta=dataRichiesta,
-            dataConsegna=dataConsegna,
-            is_deleted=False
-        )
-        self.db.add(servizio)
-        self.db.flush()
-        if dipendente_id:
-            dip = self.db.get(DipendenteTecnico, dipendente_id)
-            if dip:
-                servizio.dipendenti.append(dip)
-        self.db.commit()
-        self.db.refresh(servizio)
-        return servizio
+                # se manca codiceServizio -> mantieni logica esistente
+                if not codiceServizio:
+                    codiceServizio, _seq = self._generate_codice_servizio()
+
+                # crea l'oggetto Servizio
+                servizio = Servizio(
+                    cliente_id=cliente_id,
+                    tipo=tipo,
+                    codiceCorrente=codiceCorrente,
+                    codiceServizio=codiceServizio,
+                    cliente_nome=cliente_nome,
+                    cliente_cognome=cliente_cognome,
+                    statoServizio=StatoServizio.CREATO,
+                    dataRichiesta=dataRichiesta,
+                    dataConsegna=dataConsegna,
+                    is_deleted=False
+                )
+                self.db.add(servizio)
+                self.db.flush()  # assicura che servizio.id sia disponibile
+
+            # assegna dipendente se fornito (dentro la stessa transazione)
+                if dipendente_id:
+                    dip = self.db.get(DipendenteTecnico, dipendente_id)
+                    if dip:
+                        servizio.dipendenti.append(dip)
+
+                # refresh prima di uscire (opzionale, ma utile)
+                self.db.refresh(servizio)
+                return servizio
+
+        except SQLAlchemyError:
+            # log, rollback automatico e rilancio o ritorno di errore
+            raise
 
     def elimina_servizio(self, servizio_id: int):
         servizio = self.db.get(Servizio, servizio_id)

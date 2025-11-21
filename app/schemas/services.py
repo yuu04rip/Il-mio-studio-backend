@@ -16,6 +16,7 @@ class ServizioOut(BaseModel):
     tipo: TipoServizio
     is_deleted: bool
     dipendenti: List[int]
+    archived: bool
 
     @field_serializer('dataConsegna', 'dataRichiesta')
     def serialize_datetime(self, value: datetime, _info):

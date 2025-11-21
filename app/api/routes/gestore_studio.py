@@ -178,7 +178,7 @@ async def crea_servizio(
         cliente_id: int = None,
         tipo: TipoServizio = None,
         codiceCorrente: int = None,
-        codiceServizio: str = None,  # ora opzionale e stringa
+        codiceServizio: str = None,  # opzionale e stringa
         dipendente_id: int = None,
         db: Session = Depends(get_db)
 ):
@@ -195,8 +195,8 @@ async def crea_servizio(
     codiceServizio = body.get("codiceServizio", codiceServizio)
     dipendente_id = body.get("dipendente_id", dipendente_id)
 
-    # ora non richiediamo codiceServizio; lo genera il backend se mancante
-    for v_name, v in (("cliente_id", cliente_id), ("tipo", tipo), ("codiceCorrente", codiceCorrente)):
+    # Ora non richiediamo codiceCorrente come obbligatorio: il backend lo genera se manca
+    for v_name, v in (("cliente_id", cliente_id), ("tipo", tipo)):
         if v is None:
             raise HTTPException(status_code=422, detail=f"Campo obbligatorio mancante: {v_name}")
 

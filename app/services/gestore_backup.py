@@ -11,13 +11,14 @@ class GestoreBackup:
         Logica di setup/inizializzazione backup.
         Puoi usarla per creare strutture, loggare, ecc.
         """
+        # implementa setup reale se serve (es. connessione a storage esterno)
         print("GestoreBackup inizializzato!")
 
     def servizi_archiviati(self) -> List[Servizio]:
         """
-        Restituisce la lista di tutti i servizi archiviati (statoServizio==True).
+        Restituisce la lista di tutti i servizi archiviati (archived == True).
         """
-        return self.db.query(Servizio).filter(Servizio.statoServizio == True).all()
+        return self.db.query(Servizio).filter(Servizio.archived == True, Servizio.is_deleted == False).all()
 
     def mostra_servizi_archiviati(self) -> List[Servizio]:
         """
@@ -27,12 +28,12 @@ class GestoreBackup:
 
     def archivia_servizio(self, servizio: Servizio) -> Servizio:
         """
-        Archivia un servizio (imposta statoServizio a True).
+        Archivia un servizio (imposta archived a True).
         """
-        if servizio.statoServizio:
-            # Già archiviato
+        if getattr(servizio, "archived", False):
+            # già archiviato
             return servizio
-        servizio.statoServizio = True
+        servizio.archived = True
         self.db.add(servizio)
         self.db.commit()
         self.db.refresh(servizio)
@@ -40,22 +41,23 @@ class GestoreBackup:
 
     def dearchivia_servizio(self, servizio: Servizio) -> Servizio:
         """
-        Rende di nuovo attivo un servizio archiviato (imposta statoServizio a False).
+        Rende di nuovo attivo un servizio archiviato (imposta archived a False).
         """
-        if not servizio.statoServizio:
-            # Già attivo
+        if not getattr(servizio, "archived", False):
+            # già attivo
             return servizio
-        servizio.statoServizio = False
+        servizio.archived = False
         self.db.add(servizio)
         self.db.commit()
         self.db.refresh(servizio)
         return servizio
 
-    def modifica_servizio_archiviato(self, servizio: Servizio, statoServizio: bool) -> Servizio:
+    def modifica_servizio_archiviato(self, servizio: Servizio, archived: bool) -> Servizio:
         """
         Cambia lo stato di archiviazione di un servizio.
+        archived: bool -> True per archiviare, False per dearchiviare
         """
-        servizio.statoServizio = statoServizio
+        servizio.archived = bool(archived)
         self.db.add(servizio)
         self.db.commit()
         self.db.refresh(servizio)
@@ -66,7 +68,7 @@ class GestoreBackup:
         Elimina definitivamente un servizio archiviato.
         """
         servizio = self.db.get(Servizio, servizio_id)
-        if not servizio or not servizio.statoServizio:
+        if not servizio or not getattr(servizio, "archived", False):
             return False
         self.db.delete(servizio)
         self.db.commit()
@@ -77,6 +79,6 @@ class GestoreBackup:
         Restituisce un singolo servizio archiviato dato il suo id.
         """
         servizio = self.db.get(Servizio, servizio_id)
-        if servizio and servizio.statoServizio:
+        if servizio and getattr(servizio, "archived", False):
             return servizio
         return None
