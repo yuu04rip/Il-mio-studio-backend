@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from app.api.deps import get_db
 from app.core.email import send_email
@@ -108,11 +108,6 @@ def elimina_servizio(servizio_id: int, db: Session = Depends(get_db)):
     if not ok:
         raise HTTPException(status_code=404, detail="Servizio non trovato nella lista")
     return {"ok": True}
-
-@router.get("/servizi/", response_model=List[ServizioOut])
-def visualizza_servizi(db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    return [servizio_to_dict(s) for s in gestore.visualizza_servizi()]
 
 @router.delete("/servizi/{servizio_id}/distruggi")
 def distruggi_servizio(servizio_id: int, db: Session = Depends(get_db)):
@@ -294,9 +289,18 @@ def modifica_servizio(
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     return servizio_to_dict(servizio)
 
+from sqlalchemy.orm import joinedload
+
 @router.get("/servizi/{servizio_id}", response_model=ServizioOut)
 def get_servizio(servizio_id: int, db: Session = Depends(get_db)):
-    servizio = db.get(Servizio, servizio_id)
+    servizio = (
+        db.query(Servizio)
+        .options(
+            joinedload(Servizio.creato_da).joinedload(DipendenteTecnico.utente)
+        )
+        .filter(Servizio.id == servizio_id)
+        .first()
+    )
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     return servizio_to_dict(servizio)

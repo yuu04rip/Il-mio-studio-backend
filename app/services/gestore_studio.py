@@ -14,6 +14,7 @@ from app.models.documentazione import Documentazione
 from app.models.enums import TipoServizio, StatoServizio
 from app.services.gestore_backup import GestoreBackup
 
+
 class GestoreStudio:
     def __init__(self, db: Session):
         self.db = db
@@ -145,12 +146,20 @@ class GestoreStudio:
                     .values(last_value=next_val + 1)
                 )
                 return next_val
-        except     SQLAlchemyError:
+        except SQLAlchemyError:
             # log ed eventualmente rilancia
             raise
 
-    def aggiungi_servizio(self, cliente_id, tipo, codiceCorrente=None, codiceServizio=None,
-                          dataRichiesta=None, dataConsegna=None, dipendente_id=None):
+    def aggiungi_servizio(
+            self,
+            cliente_id,
+            tipo,
+            codiceCorrente: Optional[int] = None,
+            codiceServizio: Optional[str] = None,
+            dataRichiesta=None,
+            dataConsegna=None,
+            dipendente_id: Optional[int] = None,
+    ):
         # snapshot cliente
         cliente_nome = None
         cliente_cognome = None
@@ -166,44 +175,51 @@ class GestoreStudio:
             cliente_cognome = None
 
         try:
-            # Una sola transazione che include il lock per cliente_counters e la creazione del servizio
-            with self.db.begin():
-                # se manca codiceCorrente -> ottieni il prossimo per il cliente (atomico)
-                if not codiceCorrente:
-                    codiceCorrente = self._get_next_codice_corrente_for_cliente(cliente_id)
+            # Non apriamo una nuova transaction: usiamo quella fornita dalla dependency
+            # se manca codiceCorrente -> ottieni il prossimo per il cliente
+            if not codiceCorrente:
+                codiceCorrente = self._get_next_codice_corrente_for_cliente(cliente_id)
 
-                # se manca codiceServizio -> mantieni logica esistente
-                if not codiceServizio:
-                    codiceServizio, _seq = self._generate_codice_servizio()
+            # se manca codiceServizio -> genera
+            if not codiceServizio:
+                codiceServizio, _seq = self._generate_codice_servizio()
 
-                # crea l'oggetto Servizio
-                servizio = Servizio(
-                    cliente_id=cliente_id,
-                    tipo=tipo,
-                    codiceCorrente=codiceCorrente,
-                    codiceServizio=codiceServizio,
-                    cliente_nome=cliente_nome,
-                    cliente_cognome=cliente_cognome,
-                    statoServizio=StatoServizio.CREATO,
-                    dataRichiesta=dataRichiesta,
-                    dataConsegna=dataConsegna,
-                    is_deleted=False
-                )
-                self.db.add(servizio)
-                self.db.flush()  # assicura che servizio.id sia disponibile
+            # crea l'oggetto Servizio (FUORI dall'if precedente)
+            servizio = Servizio(
+                cliente_id=cliente_id,
+                tipo=tipo,
+                codiceCorrente=codiceCorrente,
+                codiceServizio=codiceServizio,
+                cliente_nome=cliente_nome,
+                cliente_cognome=cliente_cognome,
+                statoServizio=StatoServizio.CREATO,
+                dataRichiesta=dataRichiesta,
+                dataConsegna=dataConsegna,
+                is_deleted=False,
+                creato_da_id=dipendente_id,
+            )
 
-            # assegna dipendente se fornito (dentro la stessa transazione)
-                if dipendente_id:
-                    dip = self.db.get(DipendenteTecnico, dipendente_id)
-                    if dip:
-                        servizio.dipendenti.append(dip)
+            self.db.add(servizio)
+            self.db.flush()  # assicura che servizio.id sia disponibile
 
-                # refresh prima di uscire (opzionale, ma utile)
+            # assegna dipendente se fornito
+            if dipendente_id:
+                dip = self.db.get(DipendenteTecnico, dipendente_id)
+                if dip:
+                    servizio.dipendenti.append(dip)
+
+            # refresh (oggetto ancora attached alla sessione)
+            try:
                 self.db.refresh(servizio)
-                return servizio
+            except Exception:
+                # non critico: se refresh fallisce, continuiamo comunque
+                pass
+
+            # NOTA: commit è gestito dal caller / dal dependency get_db
+            return servizio
 
         except SQLAlchemyError:
-            # log, rollback automatico e rilancio o ritorno di errore
+            # log e rilancia per far vedere il traceback nel server
             raise
 
     def elimina_servizio(self, servizio_id: int):
