@@ -1,12 +1,14 @@
 # Il Mio Studio Backend
 
-Backend per la gestione di uno studio legale/notarile, basato su **FastAPI**, **SQLAlchemy** e **Pydantic v2**.
+Backend per la gestione di uno studio legale/notarile, basato su **FastAPI**, **SQLAlchemy** e **Pydantic v2**.  
+Questo backend espone le API consumate dal frontend:  
+[Il-mio-studio-frontend](https://github.com/yuu04rip/Il-mio-studio-frontend).
 
 ---
 
 ## 🏗️ Struttura del progetto
 
-```
+```text
 Il-mio-studio-backend/
 ├── .env
 ├── .gitignore
@@ -104,12 +106,14 @@ pip install -r requirements.txt
 
 ### 2. Configura variabili d'ambiente
 
-Crea il file `.env` con:
-```
+Crea il file `.env` con, ad esempio:
+
+```env
 SECRET_KEY=la-tua-secret-key-lunga-e-casuale
 DATABASE_URL=mysql+mysqlconnector://user:password@localhost:3306/utenti
 ```
-> Puoi usare anche SQLite per sviluppo (`sqlite:///test.db`), ma per produzione raccomandato **MySQL** o **PostgreSQL**.
+
+> Puoi usare anche SQLite per sviluppo (`sqlite:///test.db`), ma per produzione è raccomandato **MySQL** o **PostgreSQL**.
 
 ### 3. Applica le migrazioni (consigliato in produzione)
 
@@ -123,17 +127,19 @@ alembic upgrade head
 uvicorn main:app --reload
 ```
 
+L’API sarà raggiungibile di default su:  
+[http://localhost:8000](http://localhost:8000)
+
 ### 5. Documentazione API
 
-- Interattiva: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Interattiva (Swagger): [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-
 ## 🧪 Test automatici
 
-
 Avvia i test con:
+
 ```bash
 pytest app/tests -vv
 ```
@@ -142,27 +148,32 @@ pytest app/tests -vv
 
 ## 📂 Database
 
-Le tabelle vengono create all’avvio tramite:
+Le tabelle possono essere create all’avvio tramite:
+
 ```python
 Base.metadata.create_all(bind=engine)
 ```
 
-**Per produzione usa Alembic per le migrazioni!**
+**Per produzione usa Alembic per le migrazioni:**
+
 - Genera una nuova migration:
-  ```bash
-  alembic revision --autogenerate -m "Messaggio"
-  ```
+
+```bash
+alembic revision --autogenerate -m "Messaggio"
+```
+
 - Applica le migration:
-  ```bash
-  alembic upgrade head
-  ```
+
+```bash
+alembic upgrade head
+```
 
 ---
 
-
 ## 📦 Reset database (dev)
 
-Se vuoi azzerare tutti i dati e gli auto_increment:
+Se vuoi azzerare tutti i dati e gli auto_increment in MySQL/MariaDB:
+
 ```sql
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE servizio_documentazione;
@@ -176,7 +187,19 @@ TRUNCATE TABLE notai;
 TRUNCATE TABLE users;
 SET FOREIGN_KEY_CHECKS = 1;
 ```
-> **Attenzione:** Incolla tutto il blocco su phpMyAdmin o nel client MySQL, **non riga per riga**.
+
+> **Attenzione:** Incolla tutto il blocco su phpMyAdmin o nel client MySQL, **non riga per riga**.  
+> In sviluppo con SQLite puoi anche semplicemente cancellare il file `test.db`.
+
+---
+
+## 🔗 Frontend collegato
+
+Questo backend è pensato per lavorare con il frontend:  
+[Il-mio-studio-frontend](https://github.com/yuu04rip/Il-mio-studio-frontend).
+
+- Avvia prima il backend (questa repo) su `http://localhost:8000`.
+- Poi avvia il frontend seguendo le istruzioni nel suo README, assicurandoti che l’URL del backend (es. `BACKEND_URL`) punti a `http://localhost:8000`.
 
 ---
 
@@ -185,5 +208,3 @@ SET FOREIGN_KEY_CHECKS = 1;
 - Apri una **issue** per segnalare bug, domande o proposte.
 - Fai una **pull request** per proporre modifiche o nuove funzionalità.
 - **Commenta i tuoi file e le tue funzioni** per aiutare il team a collaborare meglio!
-
----
