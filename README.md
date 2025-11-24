@@ -8,63 +8,88 @@ Backend per la gestione di uno studio legale/notarile, basato su **FastAPI**, **
 
 ```
 Il-mio-studio-backend/
-│
-├── main.py
-├── app/
-│   ├── api/
-│   │   ├── routes/
-│   │   │   ├── auth.py
-│   │   │   ├── dipendente.py
-│   │   │   ├── documents.py
-│   │   │   ├── services.py
-│   │   │   ├── services_init.py
-│   │   │   ├── users.py
-│   │   └── deps.py
-│   ├── core/
-│   │   ├── config.py
-│   │   └── security.py
-│   ├── db/
-│   │   └── session.py
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── cliente.py
-│   │   ├── dipendente.py
-│   │   ├── documentazione.py
-│   │   ├── enums.py
-│   │   ├── notaio.py
-│   │   ├── services.py
-│   │   ├── tables.py
-│   │   └── user.py
-│   ├── schemas/
-│   │   ├── auth.py
-│   │   ├── cliente.py
-│   │   ├── dipendente.py
-│   │   ├── document.py
-│   │   ├── enums.py
-│   │   ├── notaio.py
-│   │   ├── services.py
-│   │   └── user.py
-├── storage/
-├── tests/
-│   ├── conftest.py
-│   ├── test_app.py
-│   ├── test_dipendente_notaio.py
-│   ├── test_docs.py
-│   ├── test_documentazione.py
-│   ├── test_servizi.py
-│   └── test_users.py
-├── alembic/
-│   ├── versions/
-│   │   └── 45d1d2fc98b0_aggiunta_codice_notarile_a_notai.py
-│   ├── env.py
-│   ├── README
-│   └── script.py.mako
 ├── .env
-├── alembic.ini
+├── .gitignore
 ├── Il-mio-studio-backend.iml
 ├── README.md
+├── alembic.ini
+├── main.py
 ├── requirements.txt
+├── storage/
 ├── test.db
+├── test_gestore_backup.db
+├── .idea/               # file di configurazione IDE (PyCharm/IntelliJ)
+│   └── ...              # vari file di progetto IDE
+├── alembic/
+│   ├── README
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+│       └── ...          # file di migration (es. aggiunta_codice_notarile_a_notai.py, ecc.)
+└── app/
+    ├── __init__.py
+    ├── api/
+    │   ├── __init__.py
+    │   ├── deps.py
+    │   └── routes/
+    │       ├── __init__.py
+    │       ├── auth.py
+    │       ├── backup.py
+    │       ├── documents.py
+    │       ├── gestore_studio.py
+    │       ├── services_init.py
+    │       ├── users.py
+    │       └── ...      # altri router eventuali
+    ├── core/
+    │   ├── __init__.py
+    │   ├── config.py
+    │   └── security.py
+    ├── db/
+    │   ├── __init__.py
+    │   └── session.py
+    ├── models/
+    │   ├── __init__.py
+    │   ├── cliente.py
+    │   ├── cliente_counters.py
+    │   ├── dipendente.py
+    │   ├── documentazione.py
+    │   ├── enums.py
+    │   ├── notaio.py
+    │   ├── services.py
+    │   ├── tables.py
+    │   └── user.py
+    ├── schemas/
+    │   ├── __init__.py
+    │   ├── auth.py
+    │   ├── cliente.py
+    │   ├── dipendente.py
+    │   ├── document.py
+    │   ├── enums.py
+    │   ├── notaio.py
+    │   ├── services.py
+    │   └── user.py
+    ├── scripts/
+    │   └── ...          # eventuali script di manutenzione/utilità
+    ├── services/
+    │   ├── __init__.py
+    │   ├── gestore_backup.py
+    │   ├── gestore_studio.py
+    │   └── gestore_login.py         # altri service/controller
+    ├── tests/
+    │   ├── __init__.py
+    │   ├── conftest.py
+    │   ├── test_app.py
+    │   ├── test_auth_api.py
+    │   ├── test_backup_api.py
+    │   ├── test_documentazione_api.py
+    │   ├── test_gestore_backup.py
+    │   ├── test_studio_dipendenti_clienti_api.py
+    │   ├── test_studio_servizi_extra_api.py
+    │   └── test_me_api.py
+    └── utils/
+        ├── __init__.py
+        ├── serializers.py
+        └── ...          # eventuali helper/utility
 ```
 
 ---
@@ -104,36 +129,13 @@ uvicorn main:app --reload
 
 ---
 
-## 🗂️ Suddivisione delle responsabilità (consigliata)
-
-Organizza il lavoro tra i membri del team, ad esempio:
-
-- **API & routes:** gestione endpoints, autenticazione, servizi, documenti, utenti
-- **Models:** DB, tabelle, relazioni, enums
-- **Schemas:** validazione input/output API
-- **Alembic:** gestione migrazioni database
-- **Tests:** test automatici per endpoints e modelli
-
-Scrivi nei commenti dei file chi è responsabile di una sezione (`# Responsabile: nome`).
-
----
-
-## 🔑 Note Pydantic v2
-
-Se usi Pydantic v2 nei tuoi schemas, ricorda di aggiungere:
-```python
-class Config:
-    from_attributes = True
-```
-
----
 
 ## 🧪 Test automatici
 
-Metti i test in `tests/` (es: `tests/test_app.py`).
+
 Avvia i test con:
 ```bash
-pytest
+pytest app/tests -vv
 ```
 
 ---
@@ -157,15 +159,6 @@ Base.metadata.create_all(bind=engine)
 
 ---
 
-## 🛠️ Endpoints principali
-
-- `/auth/register` - Registrazione utente
-- `/auth/login` - Login e token JWT
-- `/users/me` - Info utente autenticato
-- `/documents` - Upload e gestione documenti
-- `/` - Status app
-
----
 
 ## 📦 Reset database (dev)
 
@@ -194,5 +187,3 @@ SET FOREIGN_KEY_CHECKS = 1;
 - **Commenta i tuoi file e le tue funzioni** per aiutare il team a collaborare meglio!
 
 ---
-
-**Buon lavoro backend!**
