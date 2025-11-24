@@ -1,7 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, field_serializer, ConfigDict
 
 from app.models.enums import TipoServizio, StatoServizio
 
@@ -33,5 +33,4 @@ class ServizioOut(BaseModel):
     def serialize_datetime(self, value: datetime, _info):
         return value.isoformat() if value else None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

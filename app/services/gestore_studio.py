@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import text, select, insert, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-
+from datetime import datetime, UTC
 from app.models.cliente_counters import ClienteCounters
 from app.models.user import User
 from app.models.cliente import Cliente
@@ -115,9 +115,8 @@ class GestoreStudio:
             pass
 
         # fallback: timestamp (seq_id=None)
-        ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         return f"SERV-{ts}", None
-
     def _get_next_codice_corrente_for_cliente(self, cliente_id: int) -> int:
         """
         Restituisce il prossimo codiceCorrente per il cliente (atomico).
