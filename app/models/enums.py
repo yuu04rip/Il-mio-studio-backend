@@ -4,6 +4,7 @@ class TipoDocumentazione(str, enum.Enum):
     CARTA_IDENTITA = "carta_identita"
     DOCUMENTO_PROPRIETA = "documento_proprieta"
     PASSAPORTO = "passaporto"
+    TESSERA_SANITARIA = "tessera_sanitaria"
     VISURE_CATASTALI = "visure_catastali"
     PLANIMETRIA = "planimetria"
     ATTO = "atto"

@@ -2,7 +2,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import Integer, String, DateTime, ForeignKey, Enum, func, Column, LargeBinary
 from app.db.session import Base
 from app.models.enums import TipoDocumentazione
-
+from sqlalchemy import Enum as SQLEnum
 class Documentazione(Base):
     __tablename__ = "documentazioni"
 
@@ -11,7 +11,18 @@ class Documentazione(Base):
     servizio_id = Column(Integer, ForeignKey("servizi.id"), nullable=True)
     cliente = relationship("Cliente", back_populates="documentazioni")
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    tipo: Mapped[TipoDocumentazione] = mapped_column(Enum(TipoDocumentazione), nullable=False)
+    from sqlalchemy import Enum as SQLEnum
+# ...
+
+    tipo: Mapped[TipoDocumentazione] = mapped_column(
+        SQLEnum(
+            TipoDocumentazione,
+          name="tipodocumentazione",
+          values_callable=lambda e: [m.value for m in e],  # usa i .value dell'enum
+         native_enum=False,  # evita di affidarti all'ENUM nativo del DB
+     ),
+     nullable=False,
+    )
     data: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)  # <-- nuovo campo binario
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
     servizi = relationship("Servizio", secondary="servizio_documentazione", back_populates="lavoroCaricato")
