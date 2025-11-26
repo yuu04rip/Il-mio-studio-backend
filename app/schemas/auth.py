@@ -18,6 +18,7 @@ class RegisterRequest(BaseModel):
     cognome: str
     numeroTelefonico: str | None = None
     ruolo: str | None = None
+    tipo: str | None = None
 
 class ChangeEmailRequest(BaseModel):
     email: str
