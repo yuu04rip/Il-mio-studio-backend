@@ -4,6 +4,7 @@ from sqlalchemy import text, select, insert, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime, UTC
+import calendar
 from app.models.cliente_counters import ClienteCounters
 from app.models.user import User
 from app.models.cliente import Cliente
@@ -13,6 +14,27 @@ from app.models.services import Servizio
 from app.models.documentazione import Documentazione
 from app.models.enums import TipoServizio, StatoServizio
 from app.services.gestore_backup import GestoreBackup
+
+
+def _add_months(dt: datetime, months: int) -> datetime:
+    """
+    Add `months` months to datetime `dt`. Keeps time part.
+    If the target month has fewer days, it clamps to the last day of the month.
+    """
+    if dt is None:
+        return None
+    # handle naive and aware datetimes similarly (preserve tzinfo if present)
+    tz = getattr(dt, "tzinfo", None)
+    year = dt.year
+    month = dt.month + months
+    # normalize year/month
+    year += (month - 1) // 12
+    month = ((month - 1) % 12) + 1
+    day = dt.day
+    # clamp day to last day of target month
+    last_day = calendar.monthrange(year, month)[1]
+    day = min(day, last_day)
+    return datetime(year, month, day, dt.hour, dt.minute, dt.second, dt.microsecond, tzinfo=tz)
 
 
 class GestoreStudio:
@@ -117,6 +139,7 @@ class GestoreStudio:
         # fallback: timestamp (seq_id=None)
         ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         return f"SERV-{ts}", None
+
     def _get_next_codice_corrente_for_cliente(self, cliente_id: int) -> int:
         """
         Restituisce il prossimo codiceCorrente per il cliente (atomico).
@@ -159,11 +182,21 @@ class GestoreStudio:
             dataConsegna=None,
             dipendente_id: Optional[int] = None,
     ):
-        # snapshot cliente
+        """
+        Crea un servizio e, se è il PRIMO servizio per quel cliente (non conteggiando is_deleted),
+        assegna il cliente al dipendente creatore (se fornito dipendente_id).
+        L'assegnazione è effettuata in modo difensivo: cerca il campo più probabile su Cliente
+        (responsabile_id, responsabile, responsabile_tecnico, dipendente_id, owner_id) e lo imposta.
+
+        Nuova regola: se dataConsegna è None, viene impostata a dataRichiesta + 3 mesi.
+        """
+        # snapshot cliente (nome/cognome) per il servizio
         cliente_nome = None
         cliente_cognome = None
+        cliente_obj = None
         try:
             cliente = self.db.get(Cliente, cliente_id)
+            cliente_obj = cliente
             if cliente and getattr(cliente, "utente_id", None):
                 user = self.db.get(User, cliente.utente_id)
                 if user:
@@ -174,6 +207,23 @@ class GestoreStudio:
             cliente_cognome = None
 
         try:
+            # --- controllo se è il PRIMO servizio per il cliente (escludiamo is_deleted) ---
+            try:
+                existing_count = self.db.query(Servizio).filter(
+                    Servizio.cliente_id == cliente_id,
+                    Servizio.is_deleted == False
+                ).count()
+            except Exception:
+                existing_count = 0
+
+            # se non ho dataRichiesta, imposto ad ora (naive datetime)
+            if dataRichiesta is None:
+                dataRichiesta = datetime.now()
+
+            # se dataConsegna non è fornita, impostala a dataRichiesta + 3 mesi
+            if dataConsegna is None:
+                dataConsegna = _add_months(dataRichiesta, 3)
+
             # Non apriamo una nuova transaction: usiamo quella fornita dalla dependency
             # se manca codiceCorrente -> ottieni il prossimo per il cliente
             if not codiceCorrente:
@@ -207,6 +257,62 @@ class GestoreStudio:
                 if dip:
                     servizio.dipendenti.append(dip)
 
+            # --- Se è il primo servizio e abbiamo dipendente_id, assegna il cliente ---
+            if existing_count == 0 and dipendente_id and cliente_obj is not None:
+                try:
+                    dip = self.db.get(DipendenteTecnico, dipendente_id)
+                    # preferiamo assegnare l'oggetto relazione se possibile
+                    if dip is not None:
+                        if hasattr(cliente_obj, 'responsabile'):
+                            cliente_obj.responsabile = dip
+                        elif hasattr(cliente_obj, 'responsabile_tecnico'):
+                            cliente_obj.responsabile_tecnico = dip
+                        elif hasattr(cliente_obj, 'responsabile_id'):
+                            cliente_obj.responsabile_id = dipendente_id
+                        elif hasattr(cliente_obj, 'dipendente_id'):
+                            cliente_obj.dipendente_id = dipendente_id
+                        elif hasattr(cliente_obj, 'owner_id'):
+                            cliente_obj.owner_id = dipendente_id
+                        else:
+                            # fallback: crea/assegna un attributo responsabile_id se possibile
+                            try:
+                                setattr(cliente_obj, 'responsabile_id', dipendente_id)
+                            except Exception:
+                                # non critico: loggare e proseguire
+                                print(f"[GestoreStudio] warning: impossibile impostare responsabile per cliente {cliente_id}")
+                        # assicurati che il cliente sia persistito nell'unità di lavoro
+                        self.db.add(cliente_obj)
+
+                        # Commit esplicito per rendere subito persistente l'assegnazione
+                        try:
+                            self.db.commit()
+                            # refresh per sicurezza
+                            try:
+                                self.db.refresh(cliente_obj)
+                            except Exception:
+                                pass
+                        except Exception as e:
+                            # se il commit fallisce, rollback e log; non facciamo fallire la creazione del servizio
+                            self.db.rollback()
+                            print(f"[GestoreStudio] warning: commit assegnazione cliente fallito: {e}")
+                    else:
+                        # dip non trovato: proviamo ad impostare il campo id raw se esiste
+                        if hasattr(cliente_obj, 'responsabile_id'):
+                            cliente_obj.responsabile_id = dipendente_id
+                            self.db.add(cliente_obj)
+                            try:
+                                self.db.commit()
+                                try:
+                                    self.db.refresh(cliente_obj)
+                                except Exception:
+                                    pass
+                            except Exception as e:
+                                self.db.rollback()
+                                print(f"[GestoreStudio] warning: commit assegnazione cliente fallito (raw id): {e}")
+                except Exception as e:
+                    # non facciamo fallire la creazione del servizio per un errore di assegnazione
+                    print(f"[GestoreStudio] warning: errore assegnazione responsabile cliente {cliente_id}: {e}")
+
             # refresh (oggetto ancora attached alla sessione)
             try:
                 self.db.refresh(servizio)
@@ -214,7 +320,7 @@ class GestoreStudio:
                 # non critico: se refresh fallisce, continuiamo comunque
                 pass
 
-            # NOTA: commit è gestito dal caller / dal dependency get_db
+            # NOTA: commit è gestito dal caller / dal dependency get_db se non abbiamo già fatto commit sopra
             return servizio
 
         except SQLAlchemyError:
@@ -269,13 +375,83 @@ class GestoreStudio:
             self.inizializza_archiviazione()
         return self.backup.mostra_servizi_archiviati()
 
-    def inizializza_servizio(self, servizio_id: int):
+    def inizializza_servizio(self, servizio_id: int, actor_dipendente_id: Optional[int] = None):
+        """
+        Inizializza il servizio (passa CREATO -> IN_LAVORAZIONE).
+        Se actor_dipendente_id è fornito e il cliente associato non ha responsabile, assegna il cliente a quel dipendente.
+        """
         servizio = self.db.get(Servizio, servizio_id)
         if not servizio or servizio.statoServizio == StatoServizio.IN_LAVORAZIONE:
             return None
+
         servizio.statoServizio = StatoServizio.IN_LAVORAZIONE
-        self.db.commit()
-        self.db.refresh(servizio)
+
+        # Prova ad assegnare il cliente se non ha responsabile e abbiamo actor_dipendente_id
+        try:
+            if actor_dipendente_id:
+                cliente = None
+                try:
+                    cliente = self.db.get(Cliente, servizio.cliente_id)
+                except Exception:
+                    cliente = None
+
+                if cliente:
+                    has_responsabile = False
+                    if hasattr(cliente, 'responsabile_id') and getattr(cliente, 'responsabile_id', None):
+                        has_responsabile = True
+                    elif hasattr(cliente, 'responsabile') and getattr(cliente, 'responsabile', None):
+                        has_responsabile = True
+                    elif hasattr(cliente, 'dipendente_id') and getattr(cliente, 'dipendente_id', None):
+                        has_responsabile = True
+                    elif hasattr(cliente, 'owner_id') and getattr(cliente, 'owner_id', None):
+                        has_responsabile = True
+
+                    if not has_responsabile:
+                        dip = self.db.get(DipendenteTecnico, actor_dipendente_id)
+                        if dip:
+                            try:
+                                if hasattr(cliente, 'responsabile'):
+                                    cliente.responsabile = dip
+                                elif hasattr(cliente, 'responsabile_tecnico'):
+                                    cliente.responsabile_tecnico = dip
+                                elif hasattr(cliente, 'responsabile_id'):
+                                    cliente.responsabile_id = actor_dipendente_id
+                                elif hasattr(cliente, 'dipendente_id'):
+                                    cliente.dipendente_id = actor_dipendente_id
+                                elif hasattr(cliente, 'owner_id'):
+                                    cliente.owner_id = actor_dipendente_id
+                                else:
+                                    try:
+                                        setattr(cliente, 'responsabile_id', actor_dipendente_id)
+                                    except Exception:
+                                        pass
+                                self.db.add(cliente)
+                                # persist immediatamente in modo che il GET clienti?onlyMine=true veda l'assegnazione
+                                try:
+                                    self.db.commit()
+                                    try:
+                                        self.db.refresh(cliente)
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    self.db.rollback()
+                            except Exception as e:
+                                print(f"[GestoreStudio] warning: errore assegnazione cliente in inizializza_servizio: {e}")
+        except Exception as e:
+            print(f"[GestoreStudio] warning: errore durante assegnazione cliente in inizializza_servizio outer: {e}")
+
+        # Persisti stato servizio e refresh
+        try:
+            self.db.add(servizio)
+            self.db.commit()
+            self.db.refresh(servizio)
+        except Exception:
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            return None
+
         return servizio
 
     def visualizza_servizi_completati(self, dipendente_id: int):

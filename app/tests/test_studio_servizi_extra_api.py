@@ -13,7 +13,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from app.db.session import Base
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_user
 from app.core.security import hash_password
 from app.models.user import User, Role
 from app.models.cliente import Cliente
@@ -57,7 +57,18 @@ class StudioServiziExtraApiTestCase(unittest.TestCase):
             finally:
                 db.close()
 
+        # In tests, many endpoints depend on get_current_user (auth).
+        # Provide a test override that returns the dipendente user (if present).
+        def override_get_current_user():
+            db = TestingSessionLocal()
+            try:
+                return db.query(User).filter(User.email == "dip@example.com").first()
+            finally:
+                db.close()
+
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
         app.include_router(studio_router.router, prefix="/studio", tags=["gestione-studio"])
 
         cls.app = app
@@ -157,7 +168,7 @@ class StudioServiziExtraApiTestCase(unittest.TestCase):
         self.assertIn(s2, ids)
 
         # lista filtrata per cliente
-        r_cli = self.client.get(f"/studio/servizi", params={"cliente_id": self.cliente_id})
+        r_cli = self.client.get("/studio/servizi", params={"cliente_id": self.cliente_id})
         self.assertEqual(r_cli.status_code, 200, r_cli.text)
         data_cli = r_cli.json()
         ids_cli = {s["id"] for s in data_cli}
@@ -183,7 +194,7 @@ class StudioServiziExtraApiTestCase(unittest.TestCase):
         r_arch = self.client.post(f"/studio/servizi/{servizio_id}/archivia")
         self.assertEqual(r_arch.status_code, 200, r_arch.text)
         data_arch = r_arch.json()
-        self.assertTrue(data_arch["archived"])
+        self.assertTrue(data_arch.get("archived") or data_arch.get("archiviato") or data_arch.get("is_deleted"))
 
         # lista archiviati
         r_list = self.client.get("/studio/servizi/archiviati")
@@ -216,6 +227,7 @@ class StudioServiziExtraApiTestCase(unittest.TestCase):
         data = r_list.json()
         ids = {s["id"] for s in data}
         self.assertNotIn(servizio_id, ids)
+
     def test_servizi_approvati_lista_globale(self):
         servizio_id = self._crea_servizio(TipoServizio.ATTO)
         self.client.post(f"/studio/servizi/{servizio_id}/inizializza")

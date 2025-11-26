@@ -13,7 +13,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from app.db.session import Base
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_user
 from app.core.security import hash_password
 from app.models.user import User, Role
 from app.models.cliente import Cliente
@@ -64,7 +64,19 @@ class StudioServiziApiTestCase(unittest.TestCase):
             finally:
                 db.close()
 
+        # Provide a test override for get_current_user so endpoints that depend on authentication
+        # work during tests without performing real token-based login.
+        def override_get_current_user():
+            db = TestingSessionLocal()
+            try:
+                # return the user with email dip@example.com if present (created in setUp)
+                return db.query(User).filter(User.email == "dip@example.com").first()
+            finally:
+                db.close()
+
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
         app.include_router(studio_router.router, prefix="/studio", tags=["gestione-studio"])
 
         cls.app = app

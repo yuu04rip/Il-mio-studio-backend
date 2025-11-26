@@ -165,3 +165,32 @@ async def sostituisci_documentazione_cliente(
     # Se il documento è collegato ad un servizio e serve mantenerlo nella relazione, GestoreStudio dovrebbe
     # già aggiornare gli oggetti mappati; altrimenti eventuale logica aggiuntiva può essere inserita qui.
     return doc
+
+
+# --- Nuovo endpoint DELETE per compatibilità frontend ---
+@router.delete("/documenti/{doc_id}", response_model=DocumentazioneOut)
+def elimina_documentazione_by_id(
+        doc_id: int,
+        db: Session = Depends(get_db)
+):
+    """
+    Elimina un documento dato il suo id indipendentemente dal fatto che sia collegato a un servizio.
+    Se è collegato a un servizio rimuove anche la relazione servizio.lavoroCaricato.
+    Questo endpoint risponde a DELETE /documentazione/documenti/{doc_id} quando il router è incluso
+    con prefix="/documentazione".
+    """
+    doc = db.get(Documentazione, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento non trovato")
+
+    # Se collegato a un servizio, rimuoviamo il riferimento
+    servizio_id = getattr(doc, "servizio_id", None)
+    if servizio_id is not None:
+        servizio = db.get(Servizio, servizio_id)
+        if servizio and doc in getattr(servizio, "lavoroCaricato", []):
+            servizio.lavoroCaricato.remove(doc)
+            db.add(servizio)
+
+    db.delete(doc)
+    db.commit()
+    return doc

@@ -12,7 +12,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from app.db.session import Base
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_user
 from app.core.security import hash_password
 from app.models.user import User, Role
 from app.models.cliente import Cliente
@@ -57,7 +57,20 @@ class StudioDipendentiClientiApiTestCase(unittest.TestCase):
             finally:
                 db.close()
 
+        # Provide a default get_current_user override that returns the dipendente user
+        # (the actual user record will be created in setUp). We query by email
+        # when the dependency is invoked during tests.
+        def override_get_current_user():
+            db = TestingSessionLocal()
+            try:
+                # Return the dipendente user if present; otherwise None
+                return db.query(User).filter(User.email == "dip@example.com").first()
+            finally:
+                db.close()
+
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
         app.include_router(studio_router.router, prefix="/studio", tags=["gestione-studio"])
 
         cls.app = app

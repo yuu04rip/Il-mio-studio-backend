@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
 from sqlalchemy.orm import Session, joinedload
-from typing import List
-from app.api.deps import get_db
+from sqlalchemy import or_
+from typing import List, Optional
+from datetime import datetime
+from app.api.deps import get_db, get_current_user
 from app.core.email import send_email
 from app.services.gestore_studio import GestoreStudio
 from app.models.user import User
@@ -54,9 +56,44 @@ def get_notai(db: Session = Depends(get_db)):
 
 # --- CLIENTI ---
 @router.get("/clienti/", response_model=List[ClienteOut])
-def get_clienti(db: Session = Depends(get_db)):
-    gestore = GestoreStudio(db)
-    return gestore.get_clienti()
+def get_clienti(onlyMine: bool = Query(False), db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    """
+    Se ?onlyMine=true viene passato, restituisce solo i clienti "miei":
+      - clienti per i quali esiste almeno un servizio non cancellato creato da questo dipendente
+        OR per i quali il dipendente è associato come operatore al servizio (servizio.dipendenti).
+    Altrimenti restituisce tutti i clienti non cancellati.
+    Questo evita di dipendere da un campo responsabile_id che potrebbe non esistere nello schema.
+    """
+    try:
+        if onlyMine:
+            dip = db.query(DipendenteTecnico).filter(DipendenteTecnico.utente_id == current.id).first()
+            if not dip:
+                return []
+
+            # Join con Servizio: cerca clienti che abbiano almeno un servizio non eliminato
+            # creato_da_id == dip.id  OR servizio.dipendenti contains dip
+            q = (
+                db.query(Cliente)
+                .join(Servizio, Servizio.cliente_id == Cliente.id)
+                .filter(
+                    Servizio.is_deleted == False,
+                    or_(
+                        Servizio.creato_da_id == dip.id,
+                        Servizio.dipendenti.any(DipendenteTecnico.id == dip.id)
+                    )
+                )
+                .distinct()
+            )
+            if hasattr(Cliente, 'is_deleted'):
+                q = q.filter(Cliente.is_deleted == False)
+            return q.all()
+        else:
+            q = db.query(Cliente)
+            if hasattr(Cliente, 'is_deleted'):
+                q = q.filter(Cliente.is_deleted == False)
+            return q.all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/clienti/search/", response_model=List[ClienteSearchOut])
 def search_clienti(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
@@ -70,6 +107,21 @@ def cerca_cliente_per_nome(nome: str, db: Session = Depends(get_db)):
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
     return cliente
+
+# New: resolve cliente by utente_id (user.id -> cliente.id)
+@router.get("/clienti/by_user/{utente_id}")
+def get_cliente_by_user(utente_id: int, db: Session = Depends(get_db)):
+    """
+    Restituisce il record Cliente associato a un utente (utente_id -> cliente.id).
+    Usa questo endpoint quando dal frontend hai solo user.id e devi risolvere il cliente_id.
+    """
+    q = db.query(Cliente).filter(Cliente.utente_id == utente_id)
+    if hasattr(Cliente, 'is_deleted'):
+        q = q.filter(Cliente.is_deleted == False)
+    cliente = q.first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato per l'utente")
+    return {"id": cliente.id, "utente_id": cliente.utente_id}
 
 # --- SERVIZI CHAT ---
 @router.post("/servizi/richiesta-chat")
@@ -118,9 +170,17 @@ def distruggi_servizio(servizio_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 @router.post("/servizi/{servizio_id}/inizializza")
-def inizializza_servizio(servizio_id: int, db: Session = Depends(get_db)):
+def inizializza_servizio(servizio_id: int, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    """
+    Inizializza il servizio e, se l'utente corrente è un dipendente tecnico e il cliente non ha ancora
+    un responsabile, assegna il cliente al dipendente che ha effettuato l'azione.
+    """
+    # trova dipendente tecnico collegato all'utente corrente (se presente)
+    dip = db.query(DipendenteTecnico).filter(DipendenteTecnico.utente_id == current.id).first()
+    dip_id = dip.id if dip else None
+
     gestore = GestoreStudio(db)
-    servizio = gestore.inizializza_servizio(servizio_id)
+    servizio = gestore.inizializza_servizio(servizio_id, actor_dipendente_id=dip_id)
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato o già inizializzato")
     return servizio_to_dict(servizio)
@@ -197,15 +257,26 @@ async def crea_servizio(
 
     gestore = GestoreStudio(db)
     now = datetime.now()
+    # Non passiamo dataConsegna esplicita: il gestore calcolerà dataConsegna = dataRichiesta + 3 mesi se manca
     servizio = gestore.aggiungi_servizio(
         cliente_id=cliente_id,
         tipo=tipo,
         codiceCorrente=codiceCorrente,
         codiceServizio=codiceServizio,  # se None, gestore lo genererà
         dataRichiesta=now,
-        dataConsegna=now,
+        dataConsegna=None,
         dipendente_id=dipendente_id
     )
+
+    # Persistiamo le modifiche (servizio e eventuale assegnazione cliente) per renderle subito visibili
+    try:
+        db.commit()
+        db.refresh(servizio)
+    except Exception:
+        db.rollback()
+        # anche se il commit fallisce, restituiamo errore 500
+        raise HTTPException(status_code=500, detail="Errore salvataggio servizio")
+
     return servizio_to_dict(servizio)
 
 # sostituisci la route esistente /servizi/codice/{codice_servizio}
@@ -231,6 +302,7 @@ def visualizza_servizi(cliente_id: int = Query(None), db: Session = Depends(get_
     if cliente_id is not None:
         return [servizio_to_dict(s) for s in gestore.visualizza_servizi_cliente(cliente_id)]
     return [servizio_to_dict(s) for s in gestore.visualizza_servizi()]
+
 
 @router.post("/servizi/{servizio_id}/archivia", response_model=ServizioOut)
 def archivia_servizio(servizio_id: int, db: Session = Depends(get_db)):
@@ -288,8 +360,6 @@ def modifica_servizio(
     if not servizio:
         raise HTTPException(status_code=404, detail="Servizio non trovato")
     return servizio_to_dict(servizio)
-
-from sqlalchemy.orm import joinedload
 
 @router.get("/servizi/{servizio_id}", response_model=ServizioOut)
 def get_servizio(servizio_id: int, db: Session = Depends(get_db)):
@@ -366,4 +436,3 @@ def get_servizi_approvati_cliente(cliente_id: int, db: Session = Depends(get_db)
         Servizio.is_deleted == False
     ).all()
     return [servizio_to_dict(s) for s in servizi]
-#cuheriue
